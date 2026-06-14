@@ -103,7 +103,9 @@ public class SiteDialog extends BaseAlertDialog implements SiteAdapter.OnClickLi
 
     private void onColumnToggle(View view) {
         Util.hideKeyboard(binding.keyword);
-        setColumnCount(columnCount == 1 ? 2 : 1);
+        int newColumn = columnCount == 1 ? 2 : 1;
+        setColumnCount(newColumn);
+        Setting.putSiteColumn(newColumn);
     }
 
     private void setColumnCount(int count) {
