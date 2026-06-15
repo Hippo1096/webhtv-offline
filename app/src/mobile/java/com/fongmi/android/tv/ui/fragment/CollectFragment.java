@@ -310,11 +310,11 @@ public class CollectFragment extends BaseFragment implements MenuProvider, Colle
         int width = getGroupPopupWidth();
         int height = getGroupPopupHeight();
         ScrollView scroll = new ScrollView(requireContext());
+        scroll.setBackground(getGroupPopupBackground());
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         LinearLayoutCompat content = new LinearLayoutCompat(requireContext());
         content.setOrientation(LinearLayoutCompat.VERTICAL);
         content.setPadding(0, ResUtil.dp2px(6), 0, ResUtil.dp2px(6));
-        scroll.setBackground(getGroupPopupBackground());
-        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         scroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         addGroupPopupItem(content, getString(com.fongmi.android.tv.R.string.search_scope_all), MENU_GROUP_ALL);
         for (int i = 0; i < mGroups.size(); i++) addGroupPopupItem(content, mGroups.get(i), MENU_GROUP_OFFSET + i);

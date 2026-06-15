@@ -11,6 +11,7 @@ import android.text.style.ClickableSpan;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 
@@ -62,6 +63,7 @@ import com.fongmi.android.tv.setting.PlayerSetting;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.setting.SiteHealthStore;
 import com.fongmi.android.tv.ui.adapter.ArrayAdapter;
+import com.fongmi.android.tv.ui.adapter.BackdropAdapter;
 import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
 import com.fongmi.android.tv.ui.adapter.FlagAdapter;
 import com.fongmi.android.tv.ui.adapter.ParseAdapter;
@@ -114,6 +116,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private QuickAdapter mQuickAdapter;
     private FlagAdapter mFlagAdapter;
     private PartAdapter mPartAdapter;
+    private BackdropAdapter mBackdropAdapter;
     private CustomKeyDownVod mKeyDown;
     private SiteViewModel mViewModel;
     private List<String> mBroken;
@@ -133,6 +136,8 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     private com.fongmi.android.tv.ui.helper.TmdbUIAdapter mTmdbUIAdapter;
     private com.fongmi.android.tv.ui.custom.TmdbHeaderView mTmdbHeaderView;
     private Runnable mR4;
+    private Runnable mBackdropRunnable;
+    private int mCurrentBackdropPage = 0;
     private Clock mClock;
     private View mFocus1;
     private View mFocus2;
@@ -431,18 +436,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.flag.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.flag.setAdapter(mFlagAdapter = new FlagAdapter(this));
         int episodeColumn = getEpisodeColumn();
-        mBinding.episode.setNumColumns(episodeColumn);
         mBinding.episode.setHorizontalSpacing(ResUtil.dp2px(8));
-        mBinding.episode.setVerticalSpacing(ResUtil.dp2px(8));
-        mBinding.episode.setWindowAlignment(VerticalGridView.WINDOW_ALIGN_LOW_EDGE);
-        mBinding.episode.setWindowAlignmentPreferKeyLineOverLowEdge(false);
-        mBinding.episode.setWindowAlignmentPreferKeyLineOverHighEdge(false);
-        mBinding.episode.setWindowAlignmentOffset(0);
-        mBinding.episode.setWindowAlignmentOffsetPercent(0);
-        mBinding.episode.setItemAlignmentOffset(0);
-        mBinding.episode.setItemAlignmentOffsetPercent(0);
-        mBinding.episode.setAdapter(mEpisodeAdapter = new EpisodeAdapter(this));
-        mEpisodeAdapter.setColumn(episodeColumn);
+        mBinding.episode.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.episode.setAdapter(mEpisodeAdapter = new EpisodeAdapter(this, this::onEpisodeLongClick));
+        mEpisodeAdapter.setColumn(1); // 横向滚动，固定1列
         mBinding.quality.setHorizontalSpacing(ResUtil.dp2px(8));
         mBinding.quality.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.quality.setAdapter(mQualityAdapter = new QualityAdapter(this));
@@ -459,6 +456,19 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.control.parse.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
         mBinding.control.parse.setAdapter(mParseAdapter = new ParseAdapter(this));
         mParseAdapter.addAll(VodConfig.get().getParses());
+        // TMDB 相关 GridView 初始化
+        setupTmdbGridViews();
+    }
+
+    private void setupTmdbGridViews() {
+        mBinding.tmdbCast.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbCast.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.tmdbPhotos.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbPhotos.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.tmdbCrew.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbCrew.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
+        mBinding.tmdbRecommendations.setHorizontalSpacing(ResUtil.dp2px(12));
+        mBinding.tmdbRecommendations.setRowHeight(ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     private void setVideoView() {
@@ -472,7 +482,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private int getEpisodeColumn() {
-        return mEpisodeAdapter == null ? 8 : mEpisodeAdapter.getColumn();
+        return mEpisodeAdapter == null ? 8 : EpisodeAdapter.getColumn(mEpisodeAdapter.getItems());
     }
 
     private void setDecode() {
@@ -687,15 +697,21 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     private void setEpisodeAdapter(List<Episode> items, boolean scrollToCurrent) {
         mBinding.episode.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
-        int column = EpisodeAdapter.getColumn(items);
-        mBinding.episode.setNumColumns(column);
-        mEpisodeAdapter.setColumn(column);
+
+        // 先添加数据，让适配器检测是否有TMDB数据
         mEpisodeAdapter.addAll(items);
+
+        // 横向滚动，所有模式都使用1列
+        mEpisodeAdapter.setColumn(1);
+
         setArrayAdapter(items.size());
         updateFocus();
-        updateEpisodeWindow();
         if (scrollToCurrent) scrollToCurrentEpisode();
         setR2Callback();
+        // 延迟刷新一次，确保焦点状态正确初始化
+        mBinding.episode.post(() -> {
+            if (mEpisodeAdapter != null) mEpisodeAdapter.notifyDataSetChanged();
+        });
     }
 
     private void seamless(Flag flag) {
@@ -709,6 +725,10 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     public void onItemClick(Episode item) {
         if (shouldEnterFullscreen(item)) return;
         selectEpisode(item, true);
+    }
+
+    private void onEpisodeLongClick(Episode item) {
+        com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog.show(this, item);
     }
 
     private void selectEpisode(Episode item, boolean scrollToEpisode) {
@@ -773,22 +793,12 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
     }
 
     private void updateEpisodeWindowNow() {
-        int height = getEpisodeWindowHeight();
-        if (height <= 0) return;
-        ViewGroup.LayoutParams params = mBinding.episode.getLayoutParams();
-        if (params instanceof LinearLayoutCompat.LayoutParams layoutParams) {
-            if (layoutParams.height == height && layoutParams.weight == 0) return;
-            layoutParams.height = height;
-            layoutParams.weight = 0;
-            mBinding.episode.setLayoutParams(layoutParams);
-        } else if (params.height != height) {
-            params.height = height;
-            mBinding.episode.setLayoutParams(params);
-        }
+        // HorizontalGridView不需要设置固定高度
+        // 已改为横向滚动，让其自动适应内容高度
     }
 
     private int getEpisodeWindowHeight() {
-        int column = Math.max(1, mEpisodeAdapter.getColumn());
+        int column = Math.max(1, EpisodeAdapter.getColumn(mEpisodeAdapter.getItems()));
         int totalRows = Math.max(1, (mEpisodeAdapter.getItemCount() + column - 1) / column);
         int rowHeight = ResUtil.dp2px(40);
         int spacing = mBinding.episode.getVerticalSpacing();
@@ -868,7 +878,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         RecyclerView.ViewHolder holder = mBinding.episode.findContainingViewHolder(getCurrentFocus());
         if (holder == null) return false;
         int position = holder.getBindingAdapterPosition();
-        int column = Math.max(1, mEpisodeAdapter.getColumn());
+        int column = Math.max(1, EpisodeAdapter.getColumn(mEpisodeAdapter.getItems()));
         if (position == RecyclerView.NO_POSITION || position >= column) return false;
         int target = findFocusUp(3);
         if (target == 0) return false;
@@ -1498,9 +1508,262 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         if (isRedirect()) return;
         if (event.getType() == RefreshEvent.Type.DETAIL) getDetail();
         else if (event.getType() == RefreshEvent.Type.PLAYER) onRefresh();
-        else if (event.getType() == RefreshEvent.Type.VOD) updateVod(event.getVod());
+        else if (event.getType() == RefreshEvent.Type.VOD) {
+            updateVod(event.getVod());
+            // 绑定 TMDB 数据到 UI
+            bindTmdbData();
+        }
         else if (event.getType() == RefreshEvent.Type.SUBTITLE) player().setSub(Sub.from(event.getPath()));
         else if (event.getType() == RefreshEvent.Type.DANMAKU) player().setDanmaku(Danmaku.from(event.getPath()));
+    }
+
+    private void bindTmdbData() {
+        if (mTmdbUIAdapter == null || !mTmdbUIAdapter.isLoaded()) return;
+
+        boolean hasTmdbContent = false;
+        View lastVisibleGrid = null;
+
+        // 演员
+        java.util.List<com.fongmi.android.tv.bean.TmdbPerson> cast = mTmdbUIAdapter.getCast();
+        if (!cast.isEmpty()) {
+            androidx.leanback.widget.ArrayObjectAdapter castAdapter = new androidx.leanback.widget.ArrayObjectAdapter(
+                new com.fongmi.android.tv.ui.presenter.TmdbCastPresenter(this::onTmdbPersonClick)
+            );
+            castAdapter.addAll(0, cast);
+            mBinding.tmdbCast.setAdapter(new androidx.leanback.widget.ItemBridgeAdapter(castAdapter));
+            mBinding.tmdbCast.setVisibility(View.VISIBLE);
+            View castLabel = mBinding.getRoot().findViewById(R.id.tmdbCastLabel);
+            if (castLabel != null) castLabel.setVisibility(View.VISIBLE);
+            lastVisibleGrid = mBinding.tmdbCast;
+            hasTmdbContent = true;
+        } else {
+            mBinding.tmdbCast.setVisibility(View.GONE);
+            View castLabel = mBinding.getRoot().findViewById(R.id.tmdbCastLabel);
+            if (castLabel != null) castLabel.setVisibility(View.GONE);
+        }
+
+        // 剧照
+        java.util.List<String> photos = mTmdbUIAdapter.getPhotos();
+        if (!photos.isEmpty()) {
+            androidx.leanback.widget.ArrayObjectAdapter photosAdapter = new androidx.leanback.widget.ArrayObjectAdapter(
+                new com.fongmi.android.tv.ui.presenter.TmdbPhotoPresenter(this::onTmdbPhotoClick)
+            );
+            photosAdapter.addAll(0, photos);
+            mBinding.tmdbPhotos.setAdapter(new androidx.leanback.widget.ItemBridgeAdapter(photosAdapter));
+            mBinding.tmdbPhotos.setVisibility(View.VISIBLE);
+            View photosLabel = mBinding.getRoot().findViewById(R.id.tmdbPhotosLabel);
+            if (photosLabel != null) photosLabel.setVisibility(View.VISIBLE);
+
+            // 动态设置上一个Grid的nextFocusDown
+            if (lastVisibleGrid != null) {
+                lastVisibleGrid.setNextFocusDownId(R.id.tmdbPhotos);
+            }
+            lastVisibleGrid = mBinding.tmdbPhotos;
+            if (!hasTmdbContent) hasTmdbContent = true;
+        } else {
+            mBinding.tmdbPhotos.setVisibility(View.GONE);
+            View photosLabel = mBinding.getRoot().findViewById(R.id.tmdbPhotosLabel);
+            if (photosLabel != null) photosLabel.setVisibility(View.GONE);
+        }
+
+        // 主创团队
+        java.util.List<com.fongmi.android.tv.bean.TmdbPerson> creators = mTmdbUIAdapter.getCreators();
+        if (!creators.isEmpty()) {
+            androidx.leanback.widget.ArrayObjectAdapter crewAdapter = new androidx.leanback.widget.ArrayObjectAdapter(
+                new com.fongmi.android.tv.ui.presenter.TmdbCastPresenter(this::onTmdbPersonClick)
+            );
+            crewAdapter.addAll(0, creators);
+            mBinding.tmdbCrew.setAdapter(new androidx.leanback.widget.ItemBridgeAdapter(crewAdapter));
+            mBinding.tmdbCrew.setVisibility(View.VISIBLE);
+            View crewLabel = mBinding.getRoot().findViewById(R.id.tmdbCrewLabel);
+            if (crewLabel != null) crewLabel.setVisibility(View.VISIBLE);
+
+            // 动态设置上一个Grid的nextFocusDown
+            if (lastVisibleGrid != null) {
+                lastVisibleGrid.setNextFocusDownId(R.id.tmdbCrew);
+            }
+            lastVisibleGrid = mBinding.tmdbCrew;
+            if (!hasTmdbContent) hasTmdbContent = true;
+        } else {
+            mBinding.tmdbCrew.setVisibility(View.GONE);
+            View crewLabel = mBinding.getRoot().findViewById(R.id.tmdbCrewLabel);
+            if (crewLabel != null) crewLabel.setVisibility(View.GONE);
+        }
+
+        // 推荐
+        java.util.List<com.fongmi.android.tv.bean.TmdbItem> recommendations = mTmdbUIAdapter.getRecommendations();
+        if (!recommendations.isEmpty()) {
+            androidx.leanback.widget.ArrayObjectAdapter recommendationsAdapter = new androidx.leanback.widget.ArrayObjectAdapter(
+                new com.fongmi.android.tv.ui.presenter.TmdbRecommendationPresenter(this::onTmdbRecommendationClick)
+            );
+            recommendationsAdapter.addAll(0, recommendations);
+            mBinding.tmdbRecommendations.setAdapter(new androidx.leanback.widget.ItemBridgeAdapter(recommendationsAdapter));
+            mBinding.tmdbRecommendations.setVisibility(View.VISIBLE);
+            View recommendationsLabel = mBinding.getRoot().findViewById(R.id.tmdbRecommendationsLabel);
+            if (recommendationsLabel != null) recommendationsLabel.setVisibility(View.VISIBLE);
+
+            // 动态设置上一个Grid的nextFocusDown
+            if (lastVisibleGrid != null) {
+                lastVisibleGrid.setNextFocusDownId(R.id.tmdbRecommendations);
+            }
+            lastVisibleGrid = mBinding.tmdbRecommendations;
+            if (!hasTmdbContent) hasTmdbContent = true;
+        } else {
+            mBinding.tmdbRecommendations.setVisibility(View.GONE);
+            View recommendationsLabel = mBinding.getRoot().findViewById(R.id.tmdbRecommendationsLabel);
+            if (recommendationsLabel != null) recommendationsLabel.setVisibility(View.GONE);
+        }
+
+        // 设置最后一个Grid的nextFocusDown到flag
+        if (lastVisibleGrid != null) {
+            lastVisibleGrid.setNextFocusDownId(R.id.flag);
+        }
+
+        // 如果没有TMDB内容，确保按钮焦点指向flag
+        if (!hasTmdbContent) {
+            mBinding.content.setNextFocusDownId(R.id.flag);
+            mBinding.keep.setNextFocusDownId(R.id.flag);
+            mBinding.change1.setNextFocusDownId(R.id.flag);
+        }
+
+        SpiderDebug.log("tmdb-tv", "绑定完成: 演员=%d 剧照=%d 主创=%d 推荐=%d", cast.size(), photos.size(), creators.size(), recommendations.size());
+
+        // 设置背景幻灯片
+        setupBackdropSlideshow(photos);
+    }
+
+    private void setupBackdropSlideshow(java.util.List<String> photos) {
+        if (photos == null || photos.isEmpty()) {
+            if (mBinding.backdropPager != null) {
+                mBinding.backdropPager.setVisibility(View.GONE);
+            }
+            return;
+        }
+
+        // 初始化适配器
+        if (mBackdropAdapter == null) {
+            mBackdropAdapter = new BackdropAdapter();
+            if (mBinding.backdropPager != null) {
+                mBinding.backdropPager.setAdapter(mBackdropAdapter);
+                mBinding.backdropPager.setOffscreenPageLimit(1);
+            }
+        }
+
+        // 设置图片数据
+        mBackdropAdapter.setItems(photos);
+        if (mBinding.backdropPager != null) {
+            mBinding.backdropPager.setVisibility(View.VISIBLE);
+        }
+
+        // 启动自动轮播
+        startBackdropAutoScroll();
+
+        SpiderDebug.log("backdrop", "背景幻灯片启动: %d张剧照", photos.size());
+    }
+
+    private void startBackdropAutoScroll() {
+        stopBackdropAutoScroll();
+
+        if (mBackdropAdapter == null || mBackdropAdapter.getItemCount() == 0) return;
+
+        mBackdropRunnable = new Runnable() {
+            @Override
+            public void run() {
+                if (mBackdropAdapter == null || mBackdropAdapter.getItemCount() == 0) return;
+
+                mCurrentBackdropPage++;
+                if (mCurrentBackdropPage >= mBackdropAdapter.getItemCount()) {
+                    mCurrentBackdropPage = 0;
+                }
+
+                if (mBinding.backdropPager != null) {
+                    mBinding.backdropPager.setCurrentItem(mCurrentBackdropPage, true);
+                }
+
+                App.post(mBackdropRunnable, 5000); // 5秒切换一次
+            }
+        };
+
+        App.post(mBackdropRunnable, 5000);
+    }
+
+    private void stopBackdropAutoScroll() {
+        if (mBackdropRunnable != null) {
+            App.removeCallbacks(mBackdropRunnable);
+            mBackdropRunnable = null;
+        }
+    }
+
+    private void onTmdbPersonClick(com.fongmi.android.tv.bean.TmdbPerson person) {
+        if (person == null) return;
+        com.fongmi.android.tv.ui.dialog.TmdbPersonDialog.show(this, person);
+    }
+
+    private void onTmdbPhotoClick(String url, int position) {
+        if (TextUtils.isEmpty(url)) return;
+        java.util.List<String> photos = mTmdbUIAdapter.getPhotos();
+        com.fongmi.android.tv.ui.dialog.PhotoViewerDialog.show(this, photos, position, null);
+    }
+
+    private void onTmdbRecommendationClick(com.fongmi.android.tv.bean.TmdbItem item) {
+        if (item == null) return;
+        // 搜索并打开推荐内容
+        com.fongmi.android.tv.bean.Site site = VodConfig.get().getHome();
+        if (site == null || site.isEmpty() || !site.isSearchable()) {
+            com.fongmi.android.tv.ui.activity.SearchActivity.start(this, item.getTitle());
+            return;
+        }
+        Notify.show(getString(R.string.detail_work_searching, item.getTitle()));
+        com.fongmi.android.tv.utils.Task.execute(() -> {
+            com.fongmi.android.tv.bean.Vod match = searchCurrentSite(item.getTitle(), site);
+            runOnUiThread(() -> {
+                if (match == null) {
+                    Notify.show(getString(R.string.detail_work_global_searching, item.getTitle()));
+                    com.fongmi.android.tv.ui.activity.SearchActivity.start(this, item.getTitle());
+                    return;
+                }
+                VideoActivity.start(this, site.getKey(), match.getId(), match.getName(), match.getPic(), null);
+            });
+        });
+    }
+
+    private com.fongmi.android.tv.bean.Vod searchCurrentSite(String keyword, com.fongmi.android.tv.bean.Site site) {
+        try {
+            com.fongmi.android.tv.bean.Result result = SiteApi.searchContent(site, keyword, false, "1");
+            return bestVod(result != null ? result.getList() : new java.util.ArrayList<>(), keyword);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    private com.fongmi.android.tv.bean.Vod bestVod(java.util.List<com.fongmi.android.tv.bean.Vod> items, String keyword) {
+        if (items == null || items.isEmpty()) return null;
+        com.fongmi.android.tv.bean.Vod best = null;
+        int score = Integer.MIN_VALUE;
+        for (com.fongmi.android.tv.bean.Vod item : items) {
+            int current = scoreVod(item, keyword);
+            if (current > score) {
+                score = current;
+                best = item;
+            }
+        }
+        return score > 0 ? best : null;
+    }
+
+    private int scoreVod(com.fongmi.android.tv.bean.Vod item, String keyword) {
+        if (item == null) return Integer.MIN_VALUE;
+        String normalizedKeyword = normalizeTitle(keyword);
+        String name = normalizeTitle(item.getName());
+        if (name.isEmpty()) return Integer.MIN_VALUE;
+        if (name.equals(normalizedKeyword)) return 300;
+        if (name.contains(normalizedKeyword) || normalizedKeyword.contains(name)) return 220;
+        String remarks = normalizeTitle(item.getRemarks());
+        if (!remarks.isEmpty() && (remarks.contains(normalizedKeyword) || normalizedKeyword.contains(remarks))) return 120;
+        return 0;
+    }
+
+    private String normalizeTitle(String text) {
+        return TextUtils.isEmpty(text) ? "" : text.replaceAll("[\\s·•・._\\-/\\\\|()（）\\[\\]【】《》<>]+", "").trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     private void setPosition() {
@@ -1728,6 +1991,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         if (isVisible(mBinding.control.getRoot())) setR1Callback();
         if (isVisible(mBinding.control.getRoot())) mFocus2 = getCurrentFocus();
         if (onEpisodeKey(event)) return true;
+        if (handleEpisodeLongPress(event)) return true;
         if (isFullscreen() && isGone(mBinding.control.getRoot()) && mKeyDown.hasEvent(event) && service() != null) return mKeyDown.onKeyDown(event);
         if (KeyUtil.isMediaFastForward(event)) return onSeekForward();
         if (KeyUtil.isMediaRewind(event)) return onSeekBack();
@@ -1790,6 +2054,40 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         hideControl();
     }
 
+    private boolean handleEpisodeLongPress(KeyEvent event) {
+        if (event.getKeyCode() != KeyEvent.KEYCODE_DPAD_CENTER && event.getKeyCode() != KeyEvent.KEYCODE_ENTER) return false;
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        if (!event.isLongPress()) return false;
+        View focused = getCurrentFocus();
+        if (focused == null) return false;
+        // 检查焦点是否在选集卡片上
+        if (focused.getId() != R.id.cardContainer) return false;
+        ViewParent parent = focused.getParent();
+        if (parent instanceof ViewGroup) {
+            ViewGroup parentGroup = (ViewGroup) parent;
+            ViewGroup grandParent = parentGroup.getParent() instanceof ViewGroup ? (ViewGroup) parentGroup.getParent() : null;
+            if (grandParent != null) {
+                int pos = mBinding.episode.getChildAdapterPosition(grandParent);
+                if (pos >= 0 && pos < mEpisodeAdapter.getItemCount()) {
+                    Episode item = mEpisodeAdapter.getItems().get(pos);
+                    onEpisodeLongClick(item);
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isDescendantOf(View child, ViewGroup parent) {
+        if (child == parent) return true;
+        View current = child;
+        while (current != null) {
+            if (current.getParent() == parent) return true;
+            current = current.getParent() instanceof View ? (View) current.getParent() : null;
+        }
+        return false;
+    }
+
     @Override
     public void onSingleTap() {
         if (isFullscreen()) onToggle();
@@ -1838,6 +2136,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mClock.release();
         saveHistory(true);
         DanmakuApi.cancel();
+        stopBackdropAutoScroll();
         RefreshEvent.keep();
         App.removeCallbacks(mR1, mR2, mR3, mR4);
         mViewModel.getResult().removeObserver(mObserveDetail);

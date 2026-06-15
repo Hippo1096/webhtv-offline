@@ -6,6 +6,28 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
+    <!-- TMDB背景幻灯片层 -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentBottom="true">
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/backdropPager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone" />
+
+        <!-- 渐变遮罩 -->
+        <View
+            android:id="@+id/backdropMask"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/bg_backdrop_gradient" />
+
+    </FrameLayout>
+
     <FrameLayout
         android:id="@+id/video"
         android:layout_width="400dp"
@@ -173,7 +195,7 @@
             android:focusableInTouchMode="true"
             android:gravity="center"
             android:nextFocusUp="@id/actor"
-            android:nextFocusDown="@id/flag"
+            android:nextFocusDown="@id/tmdbCast"
             android:singleLine="true"
             android:text="@string/detail_desc"
             android:textColor="@color/white"
@@ -191,7 +213,7 @@
             android:focusableInTouchMode="true"
             android:gravity="center"
             android:nextFocusUp="@id/actor"
-            android:nextFocusDown="@id/flag"
+            android:nextFocusDown="@id/tmdbCast"
             android:singleLine="true"
             android:text="@string/keep"
             android:textColor="@color/white"
@@ -209,7 +231,7 @@
             android:gravity="center"
             android:nextFocusRight="@id/change1"
             android:nextFocusUp="@id/actor"
-            android:nextFocusDown="@id/flag"
+            android:nextFocusDown="@id/tmdbCast"
             android:singleLine="true"
             android:text="@string/play_change"
             android:textColor="@color/white"
@@ -218,7 +240,7 @@
 
     </androidx.appcompat.widget.LinearLayoutCompat>
 
-    <androidx.appcompat.widget.LinearLayoutCompat
+    <androidx.core.widget.NestedScrollView
         android:id="@+id/scroll"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -226,102 +248,179 @@
         android:layout_alignParentBottom="true"
         android:clipChildren="true"
         android:clipToPadding="true"
-        android:orientation="vertical"
-        android:paddingBottom="8dp">
+        android:fillViewport="true"
+        android:paddingBottom="8dp"
+        android:scrollbars="none">
 
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- 线路选择 -->
+            <androidx.leanback.widget.HorizontalGridView
+                android:id="@+id/flag"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="12dp"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <!-- 清晰度选择 -->
+            <androidx.leanback.widget.HorizontalGridView
+                android:id="@+id/quality"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:nestedScrollingEnabled="false"
+                android:visibility="gone"
+                tools:visibility="visible" />
+
+            <!-- 数组解析 -->
+            <androidx.leanback.widget.HorizontalGridView
+                android:id="@+id/array"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:visibility="gone" />
+
+            <!-- 选集列表 - 改为横向滚动 -->
+            <androidx.leanback.widget.HorizontalGridView
+                android:id="@+id/episode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:visibility="gone" />
         <!-- TMDB 演员 -->
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/tmdbCastLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/tmdb_cast_label"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <androidx.leanback.widget.HorizontalGridView
             android:id="@+id/tmdbCast"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="16dp"
             android:clipChildren="false"
             android:clipToPadding="false"
+            android:descendantFocusability="afterDescendants"
+            android:focusable="true"
+            android:nextFocusDown="@id/tmdbPhotos"
             android:paddingStart="24dp"
             android:paddingEnd="24dp"
             android:visibility="gone" />
 
         <!-- TMDB 剧照 -->
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/tmdbPhotosLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/tmdb_photos_label"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <androidx.leanback.widget.HorizontalGridView
             android:id="@+id/tmdbPhotos"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="16dp"
             android:clipChildren="false"
             android:clipToPadding="false"
+            android:descendantFocusability="afterDescendants"
+            android:focusable="true"
+            android:nextFocusDown="@id/tmdbCrew"
+            android:nextFocusUp="@id/tmdbCast"
             android:paddingStart="24dp"
             android:paddingEnd="24dp"
             android:visibility="gone" />
 
         <!-- TMDB 主创团队 -->
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/tmdbCrewLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/tmdb_crew_label"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <androidx.leanback.widget.HorizontalGridView
             android:id="@+id/tmdbCrew"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="16dp"
             android:clipChildren="false"
             android:clipToPadding="false"
+            android:descendantFocusability="afterDescendants"
+            android:focusable="true"
+            android:nextFocusDown="@id/tmdbRecommendations"
+            android:nextFocusUp="@id/tmdbPhotos"
             android:paddingStart="24dp"
             android:paddingEnd="24dp"
             android:visibility="gone" />
 
         <!-- TMDB 猜你喜欢 -->
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/tmdbRecommendationsLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            android:text="@string/tmdb_recommendations_label"
+            android:textColor="@color/white"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
         <androidx.leanback.widget.HorizontalGridView
             android:id="@+id/tmdbRecommendations"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="16dp"
             android:clipChildren="false"
             android:clipToPadding="false"
+            android:descendantFocusability="afterDescendants"
+            android:focusable="true"
+            android:nextFocusDown="@id/quick"
+            android:nextFocusUp="@id/tmdbCrew"
             android:paddingStart="24dp"
             android:paddingEnd="24dp"
-            android:visibility="gone" />
-
-        <androidx.leanback.widget.HorizontalGridView
-            android:id="@+id/flag"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:clipChildren="false"
-            android:clipToPadding="false"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp"
-            android:visibility="gone"
-            tools:visibility="visible" />
-
-        <androidx.leanback.widget.HorizontalGridView
-            android:id="@+id/quality"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:clipChildren="false"
-            android:clipToPadding="false"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp"
-            android:visibility="gone"
-            tools:visibility="visible" />
-
-        <androidx.leanback.widget.HorizontalGridView
-            android:id="@+id/array"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:clipChildren="false"
-            android:clipToPadding="false"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp"
-            android:visibility="gone" />
-
-        <androidx.leanback.widget.VerticalGridView
-            android:id="@+id/episode"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:clipChildren="true"
-            android:clipToPadding="true"
-            android:paddingStart="24dp"
-            android:paddingEnd="24dp"
-            android:paddingBottom="8dp"
             android:visibility="gone" />
 
         <androidx.leanback.widget.HorizontalGridView
@@ -346,5 +445,7 @@
             android:paddingEnd="24dp"
             android:visibility="gone" />
 
-    </androidx.appcompat.widget.LinearLayoutCompat>
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+    </androidx.core.widget.NestedScrollView>
 </com.fongmi.android.tv.ui.custom.ProgressLayout>

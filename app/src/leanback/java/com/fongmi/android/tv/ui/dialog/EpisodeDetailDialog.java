@@ -1,0 +1,189 @@
+package com.fongmi.android.tv.ui.dialog;
+
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.TextView;
+
+import androidx.appcompat.app.AlertDialog;
+import androidx.fragment.app.FragmentActivity;
+
+import com.bumptech.glide.Glide;
+import com.fongmi.android.tv.App;
+import com.fongmi.android.tv.R;
+import com.fongmi.android.tv.bean.Episode;
+import com.fongmi.android.tv.bean.TmdbConfig;
+import com.fongmi.android.tv.bean.TmdbEpisode;
+import com.fongmi.android.tv.service.TmdbService;
+import com.fongmi.android.tv.setting.Setting;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.gson.JsonObject;
+
+import java.util.List;
+
+/**
+ * 剧集详情对话框
+ */
+public class EpisodeDetailDialog {
+
+    public static void show(FragmentActivity activity, Episode episode) {
+        TmdbEpisode tmdbEpisode = episode.getTmdbEpisode();
+        if (tmdbEpisode == null) {
+            // 没有TMDB数据，显示简单信息
+            showSimpleDialog(activity, episode);
+            return;
+        }
+
+        View view = LayoutInflater.from(activity).inflate(R.layout.dialog_episode_detail, null);
+
+        ImageView still = view.findViewById(R.id.still);
+        TextView title = view.findViewById(R.id.title);
+        TextView rating = view.findViewById(R.id.rating);
+        TextView date = view.findViewById(R.id.date);
+        TextView runtime = view.findViewById(R.id.runtime);
+        TextView overview = view.findViewById(R.id.overview);
+        TextView photosLabel = view.findViewById(R.id.photosLabel);
+        androidx.leanback.widget.HorizontalGridView photosGrid = view.findViewById(R.id.photosGrid);
+
+        // 加载剧照 - 使用原图
+        if (!tmdbEpisode.getStillUrl().isEmpty()) {
+            String originalUrl = tmdbEpisode.getStillUrl().replace("/w300/", "/original/");
+            Glide.with(activity)
+                    .load(originalUrl)
+                    .placeholder(R.color.black)
+                    .error(R.color.black)
+                    .into(still);
+            still.setVisibility(View.VISIBLE);
+        } else {
+            still.setVisibility(View.GONE);
+        }
+
+        // 设置标题
+        title.setText(tmdbEpisode.getDisplayTitle());
+
+        // 设置评分
+        if (tmdbEpisode.getVoteAverage() > 0) {
+            rating.setText(String.format("★ %.1f", tmdbEpisode.getVoteAverage()));
+            rating.setVisibility(View.VISIBLE);
+        } else {
+            rating.setVisibility(View.GONE);
+        }
+
+        // 设置日期
+        if (!tmdbEpisode.getDate().isEmpty()) {
+            date.setText(String.format("播出日期: %s", tmdbEpisode.getDate()));
+            date.setVisibility(View.VISIBLE);
+        } else {
+            date.setVisibility(View.GONE);
+        }
+
+        // 设置时长
+        if (tmdbEpisode.getRuntime() > 0) {
+            runtime.setText(String.format("时长: %d 分钟", tmdbEpisode.getRuntime()));
+            runtime.setVisibility(View.VISIBLE);
+        } else {
+            runtime.setVisibility(View.GONE);
+        }
+
+        // 设置简介
+        if (!tmdbEpisode.getOverview().isEmpty()) {
+            overview.setText(tmdbEpisode.getOverview());
+            overview.setVisibility(View.VISIBLE);
+        } else {
+            overview.setText("暂无简介");
+        }
+
+        // 初始隐藏本集图片，异步加载
+        photosLabel.setVisibility(View.GONE);
+        photosGrid.setVisibility(View.GONE);
+
+        // 异步加载本集图片
+        loadEpisodePhotos(activity, tmdbEpisode, photosLabel, photosGrid);
+
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(activity)
+                .setView(view)
+                .setNegativeButton("关闭", (dialog, which) -> dialog.dismiss());
+
+        AlertDialog alertDialog = builder.create();
+
+        // 设置全屏显示，不透明背景
+        if (alertDialog.getWindow() != null) {
+            alertDialog.getWindow().setLayout(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            );
+            // 使用纯色背景（布局中已有半透明黑色背景）
+            alertDialog.getWindow().setBackgroundDrawableResource(android.R.color.black);
+        }
+
+        alertDialog.show();
+
+        // 设置按钮的焦点效果 - 让"关闭"按钮有明显的焦点边框
+        if (alertDialog.getButton(AlertDialog.BUTTON_NEGATIVE) != null) {
+            alertDialog.getButton(AlertDialog.BUTTON_NEGATIVE).setBackgroundResource(R.drawable.selector_item);
+        }
+    }
+
+    private static void showSimpleDialog(FragmentActivity activity, Episode episode) {
+        new MaterialAlertDialogBuilder(activity)
+                .setTitle(episode.getName())
+                .setMessage("暂无 TMDB 详细信息")
+                .setPositiveButton("关闭", null)
+                .show();
+    }
+
+    private static void loadEpisodePhotos(FragmentActivity activity, TmdbEpisode tmdbEpisode,
+                                         TextView photosLabel, androidx.leanback.widget.HorizontalGridView photosGrid) {
+        // 只有有tmdbId才能加载图片
+        if (tmdbEpisode.getTmdbId() == 0) {
+            android.util.Log.d("EpisodeDetail", "跳过图片加载: tmdbId为0");
+            return;
+        }
+
+        android.util.Log.d("EpisodeDetail", "开始加载图片: tmdbId=" + tmdbEpisode.getTmdbId() +
+            ", season=" + tmdbEpisode.getSeasonNumber() + ", episode=" + tmdbEpisode.getNumber());
+
+        new Thread(() -> {
+            try {
+                // 调用TMDB API获取剧集图片
+                TmdbService service = new TmdbService();
+                TmdbConfig config = TmdbConfig.objectFrom(Setting.getTmdbConfig());
+
+                android.util.Log.d("EpisodeDetail", "开始请求TMDB API...");
+
+                JsonObject episodeJson = service.episode(
+                    tmdbEpisode.getTmdbId(),
+                    tmdbEpisode.getSeasonNumber(),
+                    tmdbEpisode.getNumber(),
+                    config
+                );
+
+                android.util.Log.d("EpisodeDetail", "TMDB API返回成功");
+
+                List<String> photos = service.episodePhotos(episodeJson, config);
+
+                android.util.Log.d("EpisodeDetail", "图片数量: " + (photos != null ? photos.size() : 0));
+
+                if (photos != null && !photos.isEmpty()) {
+                    activity.runOnUiThread(() -> {
+                        photosLabel.setVisibility(View.VISIBLE);
+                        photosGrid.setVisibility(View.VISIBLE);
+
+                        com.fongmi.android.tv.ui.adapter.EpisodePhotoAdapter photoAdapter =
+                            new com.fongmi.android.tv.ui.adapter.EpisodePhotoAdapter(photos);
+                        photosGrid.setAdapter(photoAdapter);
+                        photosGrid.setHorizontalSpacing(com.fongmi.android.tv.utils.ResUtil.dp2px(12));
+
+                        android.util.Log.d("EpisodeDetail", "图片显示成功");
+                    });
+                } else {
+                    android.util.Log.d("EpisodeDetail", "没有图片数据");
+                }
+            } catch (Exception e) {
+                // 加载失败，保持隐藏状态
+                android.util.Log.e("EpisodeDetail", "加载图片失败", e);
+            }
+        }).start();
+    }
+}

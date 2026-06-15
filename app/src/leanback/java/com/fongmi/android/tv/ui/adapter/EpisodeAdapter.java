@@ -3,11 +3,15 @@ package com.fongmi.android.tv.ui.adapter;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.bumptech.glide.Glide;
+import com.fongmi.android.tv.R;
 import com.fongmi.android.tv.bean.Episode;
+import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.databinding.AdapterEpisodeBinding;
 import com.fongmi.android.tv.utils.ResUtil;
 
@@ -17,15 +21,22 @@ import java.util.List;
 public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHolder> {
 
     private final OnClickListener mListener;
+    private final OnLongClickListener mLongClickListener;
     private final List<Episode> mItems;
     private final int maxWidth;
     private final int spacing;
     private int nextFocusDown;
     private int nextFocusUp;
     private int column;
+    private boolean useTmdbCard = false;
 
     public EpisodeAdapter(OnClickListener listener) {
+        this(listener, null);
+    }
+
+    public EpisodeAdapter(OnClickListener listener, OnLongClickListener longClickListener) {
         mListener = listener;
+        mLongClickListener = longClickListener;
         mItems = new ArrayList<>();
         maxWidth = ResUtil.getScreenWidth() - ResUtil.dp2px(48);
         spacing = ResUtil.dp2px(8);
@@ -35,7 +46,12 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     public void addAll(List<Episode> items) {
         mItems.clear();
         mItems.addAll(items);
+        useTmdbCard = false;
         notifyDataSetChanged();
+    }
+
+    public boolean isUsingTmdbCard() {
+        return useTmdbCard;
     }
 
     public void clear() {
@@ -102,25 +118,19 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         notifyDataSetChanged();
     }
 
-    public int getColumn() {
-        return column;
-    }
-
     public static int getColumn(List<Episode> items) {
-        int maxTextWidth = 0;
-        int maxWidth = ResUtil.getScreenWidth() - ResUtil.dp2px(48);
-        int spacing = ResUtil.dp2px(8);
-        int padding = ResUtil.dp2px(40);
-        for (Episode item : items) maxTextWidth = Math.max(maxTextWidth, ResUtil.getTextWidth(item.getDesc().concat(item.getName()), 16) + padding);
-        for (int candidate : new int[]{8, 6, 5, 4, 3, 2}) {
-            int width = (maxWidth - spacing * (candidate - 1)) / candidate;
-            if (maxTextWidth <= width) return candidate;
-        }
+        int max = 1;
+        for (Episode item : items) max = Math.max(max, item.getName().length());
+        if (max <= 1) return 8;
+        if (max <= 3) return 6;
+        if (max <= 5) return 5;
+        if (max <= 8) return 4;
+        if (max <= 14) return 3;
         return 2;
     }
 
     private int getWidth() {
-        return (maxWidth - spacing * (column - 1)) / column;
+        return Math.min((maxWidth - spacing * (column - 1)) / column, ResUtil.dp2px(120));
     }
 
     @Override
@@ -131,23 +141,84 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
     @NonNull
     @Override
     public ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        return new ViewHolder(AdapterEpisodeBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false));
+        AdapterEpisodeBinding binding = AdapterEpisodeBinding.inflate(LayoutInflater.from(parent.getContext()), parent, false);
+        // 强制禁用系统默认焦点高亮（灰色遮盖）
+        binding.cardContainer.setDefaultFocusHighlightEnabled(false);
+        return new ViewHolder(binding);
     }
 
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Episode item = mItems.get(position);
-        holder.binding.text.getLayoutParams().width = getWidth();
-        holder.binding.text.setNextFocusUpId(position < column && nextFocusUp != 0 ? nextFocusUp : View.NO_ID);
-        holder.binding.text.setNextFocusDownId(position >= getItemCount() - column && nextFocusDown != 0 ? nextFocusDown : View.NO_ID);
-        holder.binding.text.setSelected(item.isSelected());
-        holder.binding.text.setText(item.getDesc().concat(item.getName()));
-        holder.binding.getRoot().setOnClickListener(v -> mListener.onItemClick(item));
+        TmdbEpisode tmdbEpisode = item.getTmdbEpisode();
+
+        if (useTmdbCard && tmdbEpisode != null) {
+            // 卡片模式
+            holder.binding.text.setVisibility(View.GONE);
+            holder.binding.cardContainer.setVisibility(View.VISIBLE);
+
+            // 设置选中状态（用于边框颜色）
+            holder.binding.cardContainer.setSelected(item.isSelected());
+
+            // 加载剧照
+            if (!tmdbEpisode.getStillUrl().isEmpty()) {
+                Glide.with(holder.binding.still.getContext())
+                    .load(tmdbEpisode.getStillUrl())
+                    .placeholder(R.color.black)
+                    .error(R.color.black)
+                    .into(holder.binding.still);
+            } else {
+                holder.binding.still.setImageResource(R.color.black);
+            }
+
+            // 设置标题
+            holder.binding.cardTitle.setText(tmdbEpisode.getDisplayTitle());
+
+            // 设置评分
+            if (tmdbEpisode.getVoteAverage() > 0) {
+                holder.binding.rating.setText(String.format("★%.1f", tmdbEpisode.getVoteAverage()));
+                holder.binding.rating.setVisibility(View.VISIBLE);
+            } else {
+                holder.binding.rating.setVisibility(View.GONE);
+            }
+
+            // 设置简介
+            if (!tmdbEpisode.getOverview().isEmpty()) {
+                holder.binding.overview.setText(tmdbEpisode.getOverview());
+                holder.binding.overview.setVisibility(View.VISIBLE);
+            } else {
+                holder.binding.overview.setVisibility(View.GONE);
+            }
+
+            // 点击和长按事件
+            holder.binding.cardContainer.setOnClickListener(v -> mListener.onItemClick(item));
+            if (mLongClickListener != null) {
+                holder.binding.cardContainer.setOnLongClickListener(v -> {
+                    mLongClickListener.onItemLongClick(item);
+                    return true;
+                });
+            }
+
+        } else {
+            // 文本模式
+            holder.binding.cardContainer.setVisibility(View.GONE);
+            holder.binding.text.setVisibility(View.VISIBLE);
+
+            holder.binding.text.getLayoutParams().width = getWidth();
+            holder.binding.text.setNextFocusUpId(position < column && nextFocusUp != 0 ? nextFocusUp : View.NO_ID);
+            holder.binding.text.setNextFocusDownId(position >= getItemCount() - column && nextFocusDown != 0 ? nextFocusDown : View.NO_ID);
+            holder.binding.text.setSelected(item.isSelected());
+            holder.binding.text.setText(item.getDesc().concat(item.getName()));
+            holder.binding.getRoot().setOnClickListener(v -> mListener.onItemClick(item));
+        }
     }
 
     public interface OnClickListener {
-
         void onItemClick(Episode item);
+    }
+
+    public interface OnLongClickListener {
+        void onItemLongClick(Episode item);
     }
 
     public static class ViewHolder extends RecyclerView.ViewHolder {

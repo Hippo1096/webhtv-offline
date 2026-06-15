@@ -274,12 +274,11 @@ public class SearchFragment extends BaseFragment implements MenuProvider, WordAd
         int width = getScopePopupWidth(groups);
         int height = getScopePopupHeight(groups.size() + 2);
         ScrollView scroll = new ScrollView(requireContext());
+        scroll.setBackground(getScopePopupBackground());
+        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         LinearLayoutCompat content = new LinearLayoutCompat(requireContext());
         content.setOrientation(LinearLayoutCompat.VERTICAL);
         content.setPadding(0, ResUtil.dp2px(6), 0, ResUtil.dp2px(6));
-        content.setBackground(getScopePopupBackground());
-        scroll.setFillViewport(false);
-        scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         scroll.addView(content, new ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         addScopePopupItem(content, getString(R.string.search_scope_all), MENU_SCOPE_ALL, groups);
         addScopePopupItem(content, getString(R.string.search_scope_current), MENU_SCOPE_CURRENT, groups);
