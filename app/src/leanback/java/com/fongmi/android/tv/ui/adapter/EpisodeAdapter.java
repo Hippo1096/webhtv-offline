@@ -220,9 +220,8 @@ public class EpisodeAdapter extends RecyclerView.Adapter<EpisodeAdapter.ViewHold
         // 设置选中状态（用于边框颜色）
         binding.cardContainer.setSelected(item.isSelected());
 
-        // 强制去除灰色遮罩效果
-        binding.cardContainer.setAlpha(1.0f);
-        binding.cardContainer.setForeground(null);
+        // 设置焦点边框效果
+        binding.cardContainer.setForeground(binding.cardContainer.getContext().getDrawable(R.drawable.selector_episode_card));
 
         // 加载剧照
         if (!tmdbEpisode.getStillUrl().isEmpty()) {

@@ -9,7 +9,7 @@
     android:layout_marginEnd="12dp"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:foreground="@null"
+    android:foreground="@drawable/selector_episode_card"
     android:stateListAnimator="@null"
     android:defaultFocusHighlightEnabled="false"
     app:cardCornerRadius="8dp"
