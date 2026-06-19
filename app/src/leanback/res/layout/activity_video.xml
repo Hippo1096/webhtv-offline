@@ -376,6 +376,31 @@
                 </LinearLayout>
 
             </FrameLayout>
+
+            <!-- TMDB 多来源评分（TMDB / IMDb / 烂番茄 / Metacritic 等），放在演员区上方 -->
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/tmdbOmdbRatingsLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="24dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="8dp"
+                android:text="@string/tmdb_ratings_label"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:id="@+id/tmdbOmdbRatings"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:orientation="horizontal"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp"
+                android:visibility="gone" />
+
         <!-- TMDB 演员 -->
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/tmdbCastLabel"

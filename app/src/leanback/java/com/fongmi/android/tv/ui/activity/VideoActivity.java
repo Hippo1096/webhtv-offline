@@ -109,6 +109,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
     private static final int SHORT_DRAMA_SCALE = 0; // 0=原始(适合TV), 4=裁剪(适合手机)
     private static final int TMDB_DETAIL_LOAD_TIMEOUT = 8000;
+    private static final int OMDB_FULL_RATING_TEXT_MAX_LENGTH = 20;
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.getDefault());
 
     private ActivityVideoBinding mBinding;
@@ -1938,11 +1939,239 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
 
         SpiderDebug.log("tmdb-tv", "绑定完成: 演员=%d 剧照=%d 主创=%d 推荐=%d", cast.size(), photos.size(), creators.size(), recommendations.size());
 
+        // TMDB / OMDB 多来源评分（TMDB / IMDb / 烂番茄 / Metacritic 等）
+        bindTmdbOmdbRatings();
+
         // 设置背景幻灯片
         setupBackdropSlideshow(photos);
 
         // TMDB 数据全部绑定完成，揭开遮罩并应用 TMDB 字段
         finishTmdbDetail();
+    }
+
+    /**
+     * 绑定多来源评分（TMDB / IMDb / 烂番茄 / Metacritic 等）。
+     * TMDB 匹配成功时优先显示 TMDB 分，OMDB 可用时再追加 IMDb 等外部来源。
+     */
+    private void bindTmdbOmdbRatings() {
+        View label = mBinding.getRoot().findViewById(R.id.tmdbOmdbRatingsLabel);
+        ViewGroup container = mBinding.getRoot().findViewById(R.id.tmdbOmdbRatings);
+        if (label != null) label.setVisibility(View.GONE);
+        if (container != null) {
+            container.setVisibility(View.GONE);
+            container.removeAllViews();
+        }
+        if (container == null || mTmdbUIAdapter == null) return;
+
+        com.google.gson.JsonObject detail = mTmdbUIAdapter.getTmdbDetail();
+        if (detail == null) {
+            SpiderDebug.log("tmdb-omdb", "跳过：detail 为空");
+            return;
+        }
+
+        java.util.List<String[]> baseChips = buildTmdbRatingChips();
+        renderTmdbRatingChips(label, container, baseChips);
+
+        com.google.gson.JsonObject externalIds = detail.has("external_ids") && !detail.get("external_ids").isJsonNull()
+                ? detail.getAsJsonObject("external_ids") : null;
+        if (externalIds == null || !externalIds.has("imdb_id") || externalIds.get("imdb_id").isJsonNull()) {
+            SpiderDebug.log("tmdb-omdb", "跳过：无 imdb_id，detail keys=%s", detail.keySet());
+            return;
+        }
+        String imdbId = externalIds.get("imdb_id").getAsString();
+        if (TextUtils.isEmpty(imdbId)) return;
+
+        com.fongmi.android.tv.bean.TmdbConfig tmdbConfig = com.fongmi.android.tv.bean.TmdbConfig.objectFrom(Setting.getTmdbConfig());
+        String omdbApiKey = tmdbConfig.getOmdbApiKey();
+        if (TextUtils.isEmpty(omdbApiKey)) {
+            SpiderDebug.log("tmdb-omdb", "跳过：未配置 OMDB API Key");
+            return;
+        }
+
+        SpiderDebug.log("tmdb-omdb", "开始请求 imdbId=%s", imdbId);
+        fetchTmdbOmdbRatings(imdbId, omdbApiKey, label, container, baseChips);
+    }
+
+    private void fetchTmdbOmdbRatings(String imdbId, String omdbApiKey, View label, ViewGroup container, java.util.List<String[]> baseChips) {
+        Task.execute(() -> {
+            try {
+                String url = "https://www.omdbapi.com/?i=" + imdbId + "&apikey=" + omdbApiKey;
+                okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
+                        .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+                        .build();
+                okhttp3.Request request = new okhttp3.Request.Builder().url(url).build();
+                okhttp3.Response response = client.newCall(request).execute();
+                if (!response.isSuccessful() || response.code() != 200 || response.body() == null) {
+                    SpiderDebug.log("tmdb-omdb", "请求失败 code=%d", response.code());
+                    return;
+                }
+
+                String json = response.body().string();
+                com.google.gson.JsonObject jsonObj = new com.google.gson.JsonParser().parse(json).getAsJsonObject();
+                if (jsonObj.has("Response") && "False".equals(jsonObj.get("Response").getAsString())) {
+                    SpiderDebug.log("tmdb-omdb", "返回 Response=False");
+                    return;
+                }
+
+                java.util.List<String[]> chips = new java.util.ArrayList<>(baseChips);
+                chips.addAll(buildOmdbRatingChips(jsonObj));
+                SpiderDebug.log("tmdb-omdb", "评分卡片数=%d", chips.size());
+                if (chips.isEmpty()) return;
+
+                runOnUiThread(() -> {
+                    if (isFinishing()) return;
+                    renderTmdbRatingChips(label, container, chips);
+                });
+            } catch (Exception e) {
+                SpiderDebug.log("tmdb-omdb", "获取失败: %s", e.getMessage());
+            }
+        });
+    }
+
+    private void renderTmdbRatingChips(View label, ViewGroup container, java.util.List<String[]> chips) {
+        if (container == null) return;
+        container.removeAllViews();
+        if (chips == null || chips.isEmpty()) {
+            if (label != null) label.setVisibility(View.GONE);
+            container.setVisibility(View.GONE);
+            return;
+        }
+        for (String[] chip : chips) {
+            container.addView(createOmdbRatingChip(chip[0], chip[1], chip[2]));
+        }
+        if (label != null) label.setVisibility(View.VISIBLE);
+        container.setVisibility(View.VISIBLE);
+    }
+
+    private java.util.List<String[]> buildTmdbRatingChips() {
+        java.util.List<String[]> chips = new java.util.ArrayList<>();
+        if (mTmdbUIAdapter == null) return chips;
+        String tmdbRating = mTmdbUIAdapter.getRatingText();
+        if (!TextUtils.isEmpty(tmdbRating)) {
+            chips.add(new String[]{"TMDB", tmdbRating + "/10", "#21D07A"});
+        }
+        return chips;
+    }
+
+    /**
+     * 从 OMDB 响应组装评分卡片数据：每项为 {平台名, 评分文本, 颜色}。
+     */
+    private java.util.List<String[]> buildOmdbRatingChips(com.google.gson.JsonObject jsonObj) {
+        java.util.List<String[]> chips = new java.util.ArrayList<>();
+
+        String imdbRating = optOmdbString(jsonObj, "imdbRating");
+        if (!TextUtils.isEmpty(imdbRating)) {
+            String votes = optOmdbString(jsonObj, "imdbVotes");
+            String text = buildImdbRatingText(imdbRating, votes);
+            chips.add(new String[]{"IMDb", text, "#F5C518"});
+        }
+
+        if (jsonObj.has("Ratings") && jsonObj.get("Ratings").isJsonArray()) {
+            for (com.google.gson.JsonElement el : jsonObj.getAsJsonArray("Ratings")) {
+                if (!el.isJsonObject()) continue;
+                com.google.gson.JsonObject rating = el.getAsJsonObject();
+                String source = optOmdbString(rating, "Source");
+                String value = optOmdbString(rating, "Value");
+                if (TextUtils.isEmpty(source) || TextUtils.isEmpty(value)) continue;
+                if ("Internet Movie Database".equals(source)) continue;
+                if ("Rotten Tomatoes".equals(source)) chips.add(new String[]{"烂番茄", value, "#FA320A"});
+                else if ("Metacritic".equals(source)) chips.add(new String[]{"Metacritic", value, "#FFCC33"});
+                else chips.add(new String[]{source, value, "#21D07A"});
+            }
+        }
+
+        String metascore = optOmdbString(jsonObj, "Metascore");
+        boolean hasMetacritic = false;
+        for (String[] chip : chips) if ("Metacritic".equals(chip[0])) hasMetacritic = true;
+        if (!TextUtils.isEmpty(metascore) && !hasMetacritic) {
+            chips.add(new String[]{"Metascore", metascore + "/100", "#FFCC33"});
+        }
+
+        return chips;
+    }
+
+    private String optOmdbString(com.google.gson.JsonObject obj, String key) {
+        if (obj == null || !obj.has(key) || obj.get(key).isJsonNull()) return "";
+        String value = obj.get(key).getAsString();
+        return (TextUtils.isEmpty(value) || "N/A".equals(value)) ? "" : value.trim();
+    }
+
+    private String buildImdbRatingText(String rating, String votes) {
+        if (TextUtils.isEmpty(votes)) return rating;
+        String fullText = rating + " (" + votes + ")";
+        if (fullText.length() <= OMDB_FULL_RATING_TEXT_MAX_LENGTH) return fullText;
+        String compactVotes = compactOmdbVoteCount(votes);
+        return rating + " (" + (TextUtils.isEmpty(compactVotes) ? votes : compactVotes) + ")";
+    }
+
+    private String compactOmdbVoteCount(String votes) {
+        if (TextUtils.isEmpty(votes)) return "";
+        String digits = votes.replaceAll("[^0-9]", "");
+        if (TextUtils.isEmpty(digits)) return "";
+        try {
+            long count = Long.parseLong(digits);
+            if (count >= 1_000_000_000L) return formatOmdbCompactCount(count / 1_000_000_000d, "B");
+            if (count >= 1_000_000L) return formatOmdbCompactCount(count / 1_000_000d, "M");
+            if (count >= 1_000L) return formatOmdbCompactCount(count / 1_000d, "K");
+        } catch (NumberFormatException ignored) {
+            return "";
+        }
+        return votes;
+    }
+
+    private String formatOmdbCompactCount(double value, String suffix) {
+        String text = String.format(Locale.US, "%.1f", value);
+        if (text.endsWith(".0")) text = text.substring(0, text.length() - 2);
+        return text + suffix;
+    }
+
+    /**
+     * 创建多来源评分卡片：平台名在上，评分在下。
+     */
+    private View createOmdbRatingChip(String platform, String value, String color) {
+        androidx.appcompat.widget.LinearLayoutCompat chip = new androidx.appcompat.widget.LinearLayoutCompat(this);
+        chip.setOrientation(androidx.appcompat.widget.LinearLayoutCompat.VERTICAL);
+        chip.setGravity(android.view.Gravity.CENTER);
+        chip.setMinimumWidth(ResUtil.dp2px(120));
+        chip.setPadding(ResUtil.dp2px(16), ResUtil.dp2px(10), ResUtil.dp2px(16), ResUtil.dp2px(10));
+
+        android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
+        background.setColor(0x26FFFFFF);
+        background.setCornerRadius(ResUtil.dp2px(8));
+        chip.setBackground(background);
+
+        TextView platformView = new TextView(this);
+        platformView.setText(platform);
+        platformView.setTextColor(0xFF9AA7B4);
+        platformView.setTextSize(13);
+        platformView.setGravity(android.view.Gravity.CENTER);
+        platformView.setSingleLine(true);
+        platformView.setIncludeFontPadding(false);
+        platformView.setMinWidth(ResUtil.dp2px(56));
+        chip.addView(platformView);
+
+        TextView valueView = new TextView(this);
+        valueView.setText(value);
+        valueView.setTextColor(android.graphics.Color.parseColor(color));
+        valueView.setTextSize(17);
+        valueView.setTypeface(null, android.graphics.Typeface.BOLD);
+        valueView.setGravity(android.view.Gravity.CENTER);
+        valueView.setSingleLine(true);
+        valueView.setIncludeFontPadding(false);
+        androidx.appcompat.widget.LinearLayoutCompat.LayoutParams valueParams =
+                new androidx.appcompat.widget.LinearLayoutCompat.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        valueParams.topMargin = ResUtil.dp2px(4);
+        valueView.setLayoutParams(valueParams);
+        chip.addView(valueView);
+
+        androidx.appcompat.widget.LinearLayoutCompat.LayoutParams params =
+                new androidx.appcompat.widget.LinearLayoutCompat.LayoutParams(
+                        ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.setMarginEnd(ResUtil.dp2px(12));
+        chip.setLayoutParams(params);
+        return chip;
     }
 
     private void setupBackdropSlideshow(java.util.List<String> photos) {
