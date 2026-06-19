@@ -16,6 +16,8 @@ import com.fongmi.android.tv.bean.TmdbItem;
 import com.fongmi.android.tv.ui.adapter.TmdbCastAdapter;
 import com.fongmi.android.tv.ui.helper.TmdbUIAdapter;
 import com.fongmi.android.tv.utils.ResUtil;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 
 import java.util.ArrayList;
@@ -862,6 +864,7 @@ public class TmdbHeaderView {
                 ? detail.getAsJsonObject("external_ids") : null;
         String imdbId = externalIds != null && externalIds.has("imdb_id") && !externalIds.get("imdb_id").isJsonNull()
                 ? externalIds.get("imdb_id").getAsString() : "";
+        String westernSearchQuery = buildWesternSearchQuery(detail, item, mediaType);
         com.google.android.material.textview.MaterialTextView imdbRatingView = null;
         com.google.android.material.textview.MaterialTextView rottenRatingView = null;
         com.google.android.material.textview.MaterialTextView metacriticRatingView = null;
@@ -893,18 +896,18 @@ public class TmdbHeaderView {
             linkCount++;
         }
 
-        // 烂番茄（Rotten Tomatoes）- 通过标题搜索
-        if (item != null && !TextUtils.isEmpty(item.getTitle())) {
+        // 烂番茄（Rotten Tomatoes）- 优先使用英文标题搜索
+        if (!TextUtils.isEmpty(westernSearchQuery)) {
             String rtUrl = "https://www.rottentomatoes.com/search?search=" +
-                    android.net.Uri.encode(item.getTitle());
+                    android.net.Uri.encode(westernSearchQuery);
             rottenRatingView = addExternalLink(container, "烂番茄", rtUrl, null);
             linkCount++;
         }
 
-        // Metacritic（通过标题搜索）
-        if (item != null && !TextUtils.isEmpty(item.getTitle())) {
+        // Metacritic（优先使用英文标题搜索）
+        if (!TextUtils.isEmpty(westernSearchQuery)) {
             String metacriticUrl = "https://www.metacritic.com/search/" +
-                    android.net.Uri.encode(item.getTitle()) + "/";
+                    android.net.Uri.encode(westernSearchQuery) + "/";
             metacriticRatingView = addExternalLink(container, "Metacritic", metacriticUrl, null);
             linkCount++;
         }
@@ -925,6 +928,98 @@ public class TmdbHeaderView {
             label.setVisibility(View.GONE);
             container.setVisibility(View.GONE);
         }
+    }
+
+    private String buildWesternSearchQuery(JsonObject detail, TmdbItem item, String mediaType) {
+        String title = preferredWesternSearchTitle(detail, item, mediaType);
+        if (TextUtils.isEmpty(title)) return "";
+        String year = extractYear(detail);
+        return TextUtils.isEmpty(year) || title.contains(year) ? title : title + " " + year;
+    }
+
+    private String preferredWesternSearchTitle(JsonObject detail, TmdbItem item, String mediaType) {
+        String english = englishTranslationTitle(detail, mediaType);
+        if (!TextUtils.isEmpty(english)) return english;
+
+        String original = detailTitle(detail, mediaType, true);
+        if (hasLatinLetter(original)) return original;
+
+        String localized = detailTitle(detail, mediaType, false);
+        if (hasLatinLetter(localized)) return localized;
+
+        String itemTitle = item == null ? "" : item.getTitle();
+        if (hasLatinLetter(itemTitle)) return itemTitle;
+
+        if (!TextUtils.isEmpty(original)) return original;
+        if (!TextUtils.isEmpty(localized)) return localized;
+        return itemTitle;
+    }
+
+    private String englishTranslationTitle(JsonObject detail, String mediaType) {
+        JsonArray translations = jsonArray(detail, "translations", "translations");
+        String fallback = "";
+        for (JsonElement element : translations) {
+            if (!element.isJsonObject()) continue;
+            JsonObject translation = element.getAsJsonObject();
+            if (!"en".equalsIgnoreCase(jsonString(translation, "iso_639_1"))) continue;
+            JsonObject data = jsonObject(translation, "data");
+            String title = "tv".equals(mediaType) ? jsonString(data, "name", "title") : jsonString(data, "title", "name");
+            if (TextUtils.isEmpty(title)) continue;
+            if ("US".equalsIgnoreCase(jsonString(translation, "iso_3166_1"))) return title;
+            if (TextUtils.isEmpty(fallback)) fallback = title;
+        }
+        return fallback;
+    }
+
+    private String detailTitle(JsonObject detail, String mediaType, boolean original) {
+        if (original) {
+            return "tv".equals(mediaType)
+                    ? jsonString(detail, "original_name", "original_title")
+                    : jsonString(detail, "original_title", "original_name");
+        }
+        return "tv".equals(mediaType)
+                ? jsonString(detail, "name", "title")
+                : jsonString(detail, "title", "name");
+    }
+
+    private boolean hasLatinLetter(String text) {
+        if (TextUtils.isEmpty(text)) return false;
+        for (int i = 0; i < text.length(); i++) {
+            char value = text.charAt(i);
+            if ((value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z')) return true;
+        }
+        return false;
+    }
+
+    private String jsonString(JsonObject object, String... keys) {
+        for (String key : keys) {
+            if (object == null || !object.has(key) || object.get(key).isJsonNull()) continue;
+            String value = object.get(key).getAsString();
+            if (!TextUtils.isEmpty(value)) return value.trim();
+        }
+        return "";
+    }
+
+    private JsonArray jsonArray(JsonObject object, String... keys) {
+        com.google.gson.JsonElement current = object;
+        for (String key : keys) {
+            if (current == null || !current.isJsonObject()) return new JsonArray();
+            JsonObject currentObject = current.getAsJsonObject();
+            if (!currentObject.has(key) || currentObject.get(key).isJsonNull()) return new JsonArray();
+            current = currentObject.get(key);
+        }
+        return current != null && current.isJsonArray() ? current.getAsJsonArray() : new JsonArray();
+    }
+
+    private JsonObject jsonObject(JsonObject object, String... keys) {
+        com.google.gson.JsonElement current = object;
+        for (String key : keys) {
+            if (current == null || !current.isJsonObject()) return null;
+            JsonObject currentObject = current.getAsJsonObject();
+            if (!currentObject.has(key) || currentObject.get(key).isJsonNull()) return null;
+            current = currentObject.get(key);
+        }
+        return current != null && current.isJsonObject() ? current.getAsJsonObject() : null;
     }
 
     private void fetchExternalLinkRatings(String imdbId, String omdbApiKey, ViewGroup container,
