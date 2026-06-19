@@ -977,7 +977,7 @@
     <string name="dialog_omdb_api_key_hint">输入 OMDb API Key</string>
     <string name="dialog_omdb_api_key_tip">免费获取 API Key（每天1000次）: https://www.omdbapi.com/apikey.aspx</string>
     <string name="dialog_tmdb_enable_label">启用 TMDB 元数据增强</string>
-    <string name="dialog_tmdb_enable_tip">配置 TMDB 数据源、语言、图片域名与站点规则；是否启用由详情页模式控制。</string>
+    <string name="dialog_tmdb_enable_tip">这里仅配置 TMDB 数据源、语言、图片域名与站点规则；启用状态在「详情页模式」中控制。</string>
     <string name="dialog_tmdb_enabled_sites_label">启用站点规则</string>
     <string name="dialog_tmdb_disabled_sites_label">排除规则</string>
     <string name="dialog_tmdb_add_rule_hint">添加关键词或站点…</string>

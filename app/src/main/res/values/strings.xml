@@ -997,7 +997,7 @@
     <string name="dialog_omdb_api_key_hint">Enter OMDb API Key</string>
     <string name="dialog_omdb_api_key_tip">Get free API Key (1000/day): https://www.omdbapi.com/apikey.aspx</string>
     <string name="dialog_tmdb_enable_label">Enable TMDB metadata</string>
-    <string name="dialog_tmdb_enable_tip">Configure TMDB data, language, image host, and source rules. The detail page mode controls whether it is used.</string>
+    <string name="dialog_tmdb_enable_tip">This dialog only configures TMDB data, language, image host, and source rules. Detail page mode controls whether TMDB is used.</string>
     <string name="dialog_tmdb_enabled_sites_label">Enabled sources</string>
     <string name="dialog_tmdb_disabled_sites_label">Exclude rules</string>
     <string name="dialog_tmdb_add_rule_hint">Add keyword or source…</string>
