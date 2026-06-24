@@ -1,10 +1,13 @@
 package com.fongmi.android.tv.ui.holder;
 
+import android.content.Context;
+import android.content.ContextWrapper;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.fragment.app.FragmentActivity;
 
 import com.bumptech.glide.Glide;
 import com.fongmi.android.tv.bean.Episode;
@@ -12,6 +15,7 @@ import com.fongmi.android.tv.bean.TmdbEpisode;
 import com.fongmi.android.tv.databinding.AdapterEpisodeGridBinding;
 import com.fongmi.android.tv.ui.adapter.EpisodeAdapter;
 import com.fongmi.android.tv.ui.base.BaseEpisodeHolder;
+import com.fongmi.android.tv.ui.dialog.EpisodeDetailDialog;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,11 +49,12 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
         binding.card.setVisibility(View.GONE);
         binding.text.setVisibility(View.VISIBLE);
         binding.text.setActivated(item.isSelected());
-        binding.text.setSelected(false);
-        binding.text.setEllipsize(TextUtils.TruncateAt.START);
+        binding.text.setHorizontallyScrolling(true);
         binding.text.setText(EpisodeAdapter.getNativeTitle(item));
-        binding.text.setOnFocusChangeListener((view, hasFocus) -> binding.text.setEllipsize(hasFocus ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.START));
+        setMarquee(binding.text.hasFocus() || item.isSelected());
+        binding.text.setOnFocusChangeListener((view, hasFocus) -> setMarquee(hasFocus || binding.text.isActivated()));
         binding.text.setOnClickListener(v -> listener.onItemClick(item));
+        binding.text.post(() -> setMarquee(binding.text.hasFocus() || binding.text.isActivated()));
         EpisodeAdapter.bindNativeTitlePopup(binding.getRoot(), item);
         EpisodeAdapter.bindNativeTitlePopup(binding.text, item);
     }
@@ -59,13 +64,7 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
         binding.card.setVisibility(View.VISIBLE);
         binding.card.setSelected(item.isSelected());
         binding.card.setOnClickListener(v -> listener.onItemClick(item));
-        EpisodeAdapter.bindTitlePopup(binding.getRoot(), item);
-        EpisodeAdapter.bindTitlePopup(binding.card, item);
-        EpisodeAdapter.bindTitlePopup(binding.imageFrame, item);
-        EpisodeAdapter.bindTitlePopup(binding.still, item);
-        EpisodeAdapter.bindTitlePopup(binding.textPanel, item);
-        EpisodeAdapter.bindTitlePopup(binding.cardTitle, item);
-        EpisodeAdapter.bindTitlePopup(binding.overview, item);
+        bindDetailLongClick(item, binding.getRoot(), binding.card, binding.imageFrame, binding.still, binding.textPanel, binding.cardTitle, binding.overview);
 
         binding.cardTitle.setText(EpisodeAdapter.getTitle(item));
         binding.cardTitle.setSelected(item.isSelected());
@@ -104,5 +103,33 @@ public class EpisodeGridHolder extends BaseEpisodeHolder {
         if (!TextUtils.isEmpty(episode.getDate())) values.add(episode.getDate());
         if (episode.getRuntime() > 0) values.add(episode.getRuntime() + "m");
         return TextUtils.join(" / ", values);
+    }
+
+    private void setMarquee(boolean focused) {
+        binding.text.setEllipsize(focused ? TextUtils.TruncateAt.MARQUEE : TextUtils.TruncateAt.START);
+        binding.text.setSelected(focused);
+    }
+
+    private void bindDetailLongClick(Episode item, View... views) {
+        View.OnLongClickListener longClickListener = view -> {
+            FragmentActivity activity = getActivity(view);
+            if (activity == null) return false;
+            EpisodeDetailDialog.show(activity, item);
+            return true;
+        };
+        for (View view : views) {
+            if (view == null) continue;
+            view.setOnTouchListener(null);
+            view.setOnLongClickListener(longClickListener);
+        }
+    }
+
+    private FragmentActivity getActivity(View view) {
+        Context context = view.getContext();
+        while (context instanceof ContextWrapper) {
+            if (context instanceof FragmentActivity) return (FragmentActivity) context;
+            context = ((ContextWrapper) context).getBaseContext();
+        }
+        return null;
     }
 }

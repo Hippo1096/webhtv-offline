@@ -33,6 +33,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.widget.LinearLayoutCompat;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
+import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentActivity;
 import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
@@ -152,6 +153,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private static final int FUSION_PLAYER_SIDE_MARGIN_DP = 16;
     private static final int FUSION_PLAYER_HEIGHT_DP = 252;
     private static final int FUSION_PLAYER_BOTTOM_GAP_DP = 14;
+    private static final int EPISODE_CARD_HEIGHT_DP = 190;
+    private static final int EPISODE_CARD_VERTICAL_MARGIN_DP = 12;
 
     private ActivityVideoBinding mBinding;
     private ViewGroup.LayoutParams mFrameParams;
@@ -188,8 +191,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private boolean playHealthRecorded;
     private boolean mNativePersonalTmdbLoading;
     private boolean mNativePersonalDoubanLoading;
-    private boolean mEpisodeGridMode = true;
+    private boolean mEpisodeGridMode = Setting.getTmdbEpisodeGridMode();
     private int mEpisodeSpanCount;
+    private int mEpisodeBottomInset;
+    private int mEpisodeMaxHeight;
     private Runnable mR1;
     private Runnable mR2;
     private Runnable mR3;
@@ -528,6 +533,20 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     @Override
+    protected void onPlayerRebuilt() {
+        setPlayerKernel();
+        setDecode();
+        setLut();
+        refreshControlDialog();
+    }
+
+    private void refreshControlDialog() {
+        for (Fragment fragment : getSupportFragmentManager().getFragments()) {
+            if (fragment instanceof ControlDialog dialog) dialog.setPlayer();
+        }
+    }
+
+    @Override
     protected void onNewIntent(Intent intent) {
         String oldId = getId();
         super.onNewIntent(intent);
@@ -654,9 +673,35 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void setEpisodeBottomInset(int bottom) {
+        mEpisodeBottomInset = bottom;
         int padding = bottom + ResUtil.dp2px(12);
         padding = Math.max(padding, ResUtil.dp2px(28));
         mBinding.episode.setPaddingRelative(mBinding.episode.getPaddingStart(), mBinding.episode.getPaddingTop(), mBinding.episode.getPaddingEnd(), padding);
+        mBinding.episode.post(this::updateEpisodeViewportHeight);
+    }
+
+    private void updateEpisodeViewportHeight() {
+        if (mBinding.episode.getVisibility() != View.VISIBLE || mBinding.getRoot().getHeight() <= 0) return;
+        int[] root = new int[2];
+        int[] episode = new int[2];
+        mBinding.getRoot().getLocationOnScreen(root);
+        mBinding.episode.getLocationOnScreen(episode);
+        int available = root[1] + mBinding.getRoot().getHeight() - mEpisodeBottomInset - ResUtil.dp2px(8) - episode[1];
+        int limit = ResUtil.isPad() || ResUtil.isLand(this) ? ResUtil.dp2px(328) : ResUtil.dp2px(280);
+        int height = Math.min(limit, available);
+        if (isTmdbEpisodeCardMode()) height = Math.max(height, getEpisodeCardMinHeight());
+        if (height <= 0 || height == mEpisodeMaxHeight) return;
+        mEpisodeMaxHeight = height;
+        mBinding.episode.setMaxHeight(height);
+        mBinding.episode.requestLayout();
+    }
+
+    private boolean isTmdbEpisodeCardMode() {
+        return mEpisodeAdapter != null && !mEpisodeAdapter.isEmpty() && shouldUseTmdbEpisodeCards(mEpisodeAdapter.getItems());
+    }
+
+    private int getEpisodeCardMinHeight() {
+        return ResUtil.dp2px(EPISODE_CARD_HEIGHT_DP + EPISODE_CARD_VERTICAL_MARGIN_DP);
     }
 
     private void setRecyclerView() {
@@ -736,7 +781,12 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
                         if (child == null || mEpisodeAdapter == null) return;
                         int position = mBinding.episode.getChildAdapterPosition(child);
                         if (position == RecyclerView.NO_POSITION || position >= mEpisodeAdapter.getItems().size()) return;
-                        pending = () -> EpisodeAdapter.showTitlePopup(child, mEpisodeAdapter.getItems().get(position));
+                        pending = () -> {
+                            if (mEpisodeAdapter == null) return;
+                            int current = mBinding.episode.getChildAdapterPosition(child);
+                            if (current == RecyclerView.NO_POSITION || current >= mEpisodeAdapter.getItems().size()) return;
+                            EpisodeAdapter.showTitlePopup(child, mEpisodeAdapter.getItems().get(current));
+                        };
                         handler.postDelayed(pending, ViewConfiguration.getLongPressTimeout());
                         break;
                     case MotionEvent.ACTION_MOVE:
@@ -1114,6 +1164,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mFlagAdapter.setSelected(item);
         scrollToPosition(mBinding.flag, mFlagAdapter.getPosition());
         setEpisodeAdapter(item.getEpisodes());
+        scrollToPosition(mBinding.episode, mEpisodeAdapter.getPosition());
         setQualityVisible(false);
         seamless(item);
     }
@@ -1123,7 +1174,6 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (shouldEnterFullscreen(item)) return;
         mFlagAdapter.toggle(item);
         setEpisodeAdapter(getFlag().getEpisodes());
-        scrollToPosition(mBinding.episode, mEpisodeAdapter.getPosition());
         if (isFullscreen()) Notify.show(getString(R.string.play_ready, item.getName()));
         onRefresh();
     }
@@ -1170,6 +1220,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.control.prev.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         mBinding.reverse.setVisibility(size < 2 ? View.GONE : View.VISIBLE);
         boolean showViewMode = useTmdbCard && size > 1;
+        if (showViewMode) mEpisodeGridMode = Setting.getTmdbEpisodeGridMode();
         if (!showViewMode) mEpisodeGridMode = true;
         updateEpisodeViewModeButton();
         if (mBinding.episodeViewMode != null) mBinding.episodeViewMode.setVisibility(showViewMode ? View.VISIBLE : View.GONE);
@@ -1179,6 +1230,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mEpisodeGroupAdapter.addAll(groups);
         mBinding.episodeGroup.setVisibility(groups.size() > 1 ? View.VISIBLE : View.GONE);
         setVisibleEpisodeAdapter(items, mEpisodeGroupAdapter.isEmpty() ? null : mEpisodeGroupAdapter.getItems().get(mEpisodeGroupAdapter.getPosition()));
+        mBinding.episode.post(this::updateEpisodeViewportHeight);
     }
 
     private void setVisibleEpisodeAdapter(List<Episode> items, EpisodeGroupAdapter.Group group) {
@@ -1200,6 +1252,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         updateEpisodeLayout(items);
         mEpisodeAdapter.addAll(items);
         updateEpisodeViewModeButton();
+        mBinding.episode.post(this::updateEpisodeViewportHeight);
     }
 
     private void updateEpisodeLayout(List<Episode> items) {
@@ -1229,7 +1282,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (shouldUseTmdbEpisodeCards(items)) return getEpisodeGridSpanCount();
         int maxLen = 0;
         for (Episode item : items) maxLen = Math.max(maxLen, item.getDesc().concat(item.getName()).length());
-        int ideal = maxLen >= 14 ? 160 : maxLen >= 10 ? 130 : maxLen >= 7 ? 104 : 80;
+        if (maxLen >= 12) return PlayerSetting.getEpisodeColumn();
+        int ideal = maxLen >= 10 ? 130 : maxLen >= 7 ? 104 : 80;
         int width = mBinding.episode.getWidth() > 0 ? mBinding.episode.getWidth() : ResUtil.getScreenWidth(this) - ResUtil.dp2px(32);
         int span = width / ResUtil.dp2px(ideal);
         return Math.max(2, Math.min(getEpisodeSpanCount(), span));
@@ -1238,6 +1292,12 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     private int getSelectedEpisodePosition(List<Episode> items) {
         for (int i = 0; i < items.size(); i++) if (items.get(i).isSelected()) return i;
         return 0;
+    }
+
+    private void syncSelectedEpisode(Flag flag) {
+        if (flag == null || mHistory == null) return;
+        Episode episode = flag.find(mHistory.getVodRemarks(), false);
+        if (episode != null) flag.toggle(true, episode);
     }
 
     private int getEpisodeCount() {
@@ -1275,6 +1335,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void onMore() {
+        syncSelectedEpisode(getFlag());
         List<Episode> episodes = getFlag().getEpisodes();
         EpisodeGridDialog.create().reverse(mHistory.isRevSort()).episodes(episodes).tmdbCard(shouldUseTmdbEpisodeCards(episodes)).show(this);
     }
@@ -1312,6 +1373,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
             return;
         }
         mEpisodeGridMode = !mEpisodeGridMode;
+        Setting.putTmdbEpisodeGridMode(mEpisodeGridMode);
         setEpisodeItems(new ArrayList<>(mEpisodeAdapter.getItems()));
         scrollToPosition(mBinding.episode, mEpisodeAdapter.getPosition());
     }
@@ -1591,6 +1653,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void onEpisodes() {
+        syncSelectedEpisode(getFlag());
         EpisodeListDialog.create().flags(mFlagAdapter.getItems()).reverse(mHistory.isRevSort()).tmdbCard(shouldUseTmdbEpisodeCards(getFlag().getEpisodes())).show(this);
     }
 
@@ -1664,8 +1727,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         setFullscreen(false);
         if (isLand() && !player().isPortrait()) setTransition();
         setRequestedOrientation(isPort() ? ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_FULL_USER);
-        mBinding.episodeGroup.postDelayed(() -> mBinding.episodeGroup.scrollToPosition(mEpisodeGroupAdapter.getPosition()), 100);
-        mBinding.episode.postDelayed(() -> mBinding.episode.scrollToPosition(mEpisodeAdapter.getPosition()), 100);
+        mBinding.episodeGroup.postDelayed(() -> scrollToPosition(mBinding.episodeGroup, mEpisodeGroupAdapter.getPosition()), 100);
+        mBinding.episode.postDelayed(() -> scrollToPosition(mBinding.episode, mEpisodeAdapter.getPosition()), 100);
         mBinding.control.title.setVisibility(View.INVISIBLE);
         setSizeText();
         mBinding.video.setLayoutParams(mFrameParams);
@@ -2110,12 +2173,6 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         setPosition();
         mClock.setCallback(this);
         requestIntroSkipPlan();
-    }
-
-    @Override
-    protected void onPlayerRebuilt() {
-        setPlayerKernel();
-        setDecode();
     }
 
     @Override
@@ -3096,7 +3153,11 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void scrollToPosition(RecyclerView view, int position) {
-        view.post(() -> view.scrollToPosition(position));
+        view.post(() -> {
+            RecyclerView.Adapter<?> adapter = view.getAdapter();
+            if (adapter == null || position < 0 || position >= adapter.getItemCount()) return;
+            view.scrollToPosition(position);
+        });
     }
 
     @Override
@@ -3108,6 +3169,21 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     public void onScale(int tag) {
         mKeyDown.resetScale();
         setScale(tag);
+    }
+
+    @Override
+    public void onEpisodeColumn(int column) {
+        PlayerSetting.putEpisodeColumn(column);
+        if (mEpisodeAdapter == null) return;
+        if (mFlagAdapter == null || mFlagAdapter.isEmpty()) {
+            updateEpisodeLayout(mEpisodeAdapter.getItems());
+            mEpisodeAdapter.notifyItemRangeChanged(0, mEpisodeAdapter.getItemCount());
+        } else {
+            EpisodeGroupAdapter.Group group = mEpisodeGroupAdapter.isEmpty() ? null : mEpisodeGroupAdapter.getItems().get(mEpisodeGroupAdapter.getPosition());
+            setVisibleEpisodeAdapter(getFlag().getEpisodes(), group);
+        }
+        scrollToPosition(mBinding.episode, mEpisodeAdapter.getPosition());
+        mBinding.episode.post(this::updateEpisodeViewportHeight);
     }
 
     @Override
