@@ -843,6 +843,25 @@ public class TmdbHeaderView {
         container.setVisibility(visibility);
     }
 
+    private void updateFusionRatingsVisibility() {
+        if (headerRoot == null) return;
+        ViewGroup container = headerRoot.findViewById(R.id.tmdbRatingsContainer);
+        if (container == null) return;
+        setRatingContainerVisible(container, container.getChildCount() > 0 && isCurrentRatingDisplay(container));
+    }
+
+    private boolean isCurrentRatingDisplay(ViewGroup container) {
+        if (!(container.getTag() instanceof String) || boundAdapter == null) return false;
+        TmdbItem item = boundAdapter.getTmdbItem();
+        JsonObject detail = boundAdapter.getTmdbDetail();
+        if (item == null || detail == null) return false;
+        int tmdbId = item.getTmdbId();
+        String mediaType = detail.has("first_air_date") ? "tv" : "movie";
+        String title = item.getTitle();
+        int year = parseYear(extractYear(detail));
+        return TextUtils.equals((String) container.getTag(), ratingDisplayKey(title, mediaType, year, tmdbId));
+    }
+
     private void setRatingDisplayChips(String displayKey, List<String[]> chips) {
         synchronized (ratingDisplayChips) {
             ratingDisplayChips.put(displayKey, chips == null ? new ArrayList<>() : new ArrayList<>(chips));
@@ -1207,7 +1226,7 @@ public class TmdbHeaderView {
         setVisibility(R.id.tmdbNativeHero, View.GONE);
         setVisibility(R.id.tmdbFusionInfoCard, View.VISIBLE);
         setVisibility(R.id.tmdbOverview, View.GONE);
-        setVisibility(R.id.tmdbRatingsContainer, View.GONE);
+        updateFusionRatingsVisibility();
         moveActionsForFusion();
         styleFusionActions();
 
