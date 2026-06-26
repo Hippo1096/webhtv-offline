@@ -5693,7 +5693,11 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private void updateKeepState() {
-        String text = Keep.find(getHistoryKey()) == null ? getString(R.string.keep) : getString(R.string.keep_del);
+        boolean kept = Keep.find(getHistoryKey()) != null;
+        String text = getString(TmdbDetailLabels.keepLabel(kept));
+        binding.keep.setSelected(kept);
+        binding.keepTop.setSelected(kept);
+        binding.keepFusion.setSelected(kept);
         binding.keep.setText(text);
         binding.keepTop.setText(text);
         binding.keepFusion.setText(text);
