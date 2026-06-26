@@ -95,6 +95,7 @@ import com.fongmi.android.tv.ui.dialog.TmdbSearchDialog;
 import com.fongmi.android.tv.ui.dialog.TrackDialog;
 import com.fongmi.android.tv.ui.helper.DetailThemeVisibility;
 import com.fongmi.android.tv.ui.helper.TmdbCinemaTheme;
+import com.fongmi.android.tv.ui.helper.TmdbDetailLabels;
 import com.fongmi.android.tv.ui.helper.TmdbRecommendationRows;
 import com.fongmi.android.tv.utils.BatteryUtil;
 import com.fongmi.android.tv.utils.Formatters;
@@ -2122,10 +2123,8 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     private void bindMeta() {
         binding.metaContainer.removeAllViews();
         addMetaChip(getMediaTypeLabel());
-        addMetaChip(metaYear());
         addMetaChip(firstGenre());
         addMetaChip(firstCountry());
-        addMetaChip(firstCrew("Director"));
         addMetaChip(certificationLabel());
     }
 
@@ -6430,12 +6429,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
     }
 
     private String buildSubtitle() {
-        List<String> parts = new ArrayList<>();
-        String date = releaseDate();
-        if (!TextUtils.isEmpty(date)) parts.add(date);
-        String rating = ratingLabel();
-        if (!TextUtils.isEmpty(rating)) parts.add(rating);
-        return TextUtils.join(" · ", parts);
+        return TmdbDetailLabels.headerSubtitle(releaseDate());
     }
 
     private String releaseDate() {
@@ -6529,7 +6523,7 @@ public class TmdbDetailActivity extends PlaybackActivity implements TrackDialog.
         String value = certificationForRegion(results, region, tv);
         if (TextUtils.isEmpty(value)) value = certificationForRegion(results, "US", tv);
         if (TextUtils.isEmpty(value)) value = firstCertification(results, tv);
-        return value;
+        return TmdbDetailLabels.certificationLabel(value);
     }
 
     private String certificationForRegion(JsonArray results, String region, boolean tv) {
