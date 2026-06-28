@@ -577,11 +577,30 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private String getOsdTitle() {
-        String name = getName();
-        if (mEpisodeAdapter == null || mEpisodeAdapter.isEmpty()) return name;
-        String episode = Objects.toString(getEpisode().getName(), "");
-        if (TextUtils.isEmpty(episode) || TextUtils.equals(name, episode)) return name;
-        return TextUtils.isEmpty(name) ? episode : name + " " + episode;
+        return EpisodeTitleFormatter.buildPlaybackTitle(getPlaybackName(), getCurrentEpisodeTitle());
+    }
+
+    private String getPlaybackName() {
+        CharSequence name = mBinding == null || mBinding.name == null ? "" : mBinding.name.getText();
+        return TextUtils.isEmpty(name) ? getName() : name.toString();
+    }
+
+    private String getCurrentEpisodeTitle() {
+        return mEpisodeAdapter == null || mEpisodeAdapter.isEmpty() ? "" : getEpisodeTitle(getEpisode());
+    }
+
+    private String getEpisodeTitle(Episode episode) {
+        return episode == null ? "" : EpisodeAdapter.getTitle(episode);
+    }
+
+    private CharSequence getPlaybackControlTitle() {
+        return getPlaybackControlTitle(mEpisodeAdapter == null || mEpisodeAdapter.isEmpty() ? null : getEpisode());
+    }
+
+    private CharSequence getPlaybackControlTitle(Episode episode) {
+        String name = getPlaybackName();
+        String title = getEpisodeTitle(episode);
+        return TextUtils.isEmpty(title) || TextUtils.equals(name, title) ? name : getString(R.string.detail_title, name, title);
     }
 
     private int getScale() {
@@ -1108,6 +1127,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mTmdbFallbackToNative = false;
         mTmdbContentLoaded = false;
         mTmdbAutoDialogShown = false;
+        setOriginalEnhancedActionVisibility(tmdbMode && Setting.isOriginalEnhancedDetailPage());
         if (tmdbMode) {
             hideTmdbHeader();
             setNativeDetailInfoVisible(false);
@@ -1259,7 +1279,6 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.director.setVisibility(View.GONE);
         mBinding.actor.setVisibility(View.GONE);
         mBinding.contentLayout.setVisibility(View.GONE);
-        mBinding.actionRow.setVisibility(View.GONE);
     }
 
     private void setPlainText(TextView view, String text) {
@@ -1277,7 +1296,10 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         mBinding.director.setVisibility(visibility);
         mBinding.actor.setVisibility(visibility);
         mBinding.contentLayout.setVisibility(visibility);
-        mBinding.actionRow.setVisibility(visibility);
+    }
+
+    private void setOriginalEnhancedActionVisibility(boolean hide) {
+        mBinding.shortDisplay.setVisibility(hide ? View.GONE : View.VISIBLE);
     }
 
     private void setText(TextView view, int resId, String text) {
@@ -1359,7 +1381,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
     }
 
     private void getPlayer(Flag flag, Episode episode) {
-        mBinding.control.title.setText(getString(R.string.detail_title, mBinding.name.getText(), episode.getName()));
+        mBinding.control.title.setText(getPlaybackControlTitle(episode));
         playerStartTime = System.currentTimeMillis();
         beginPlayHealth();
         SpiderDebug.log("video-flow", "player start key=%s flag=%s episode=%s url=%s", getKey(), flag.getFlag(), episode.getName(), episode.getUrl());
@@ -2617,8 +2639,8 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         if (id) mHistory.replace(getHistoryKey());
         if (name) mHistory.setVodName(item.getName());
         if (name) mBinding.name.setText(item.getName());
-        if (name) mBinding.control.title.setText(item.getName());
         updateFlag(getFlag(), item.getFlags());
+        mBinding.control.title.setText(getPlaybackControlTitle());
         if (pic) setArtwork(item.getPic());
         if (pic || name) setMetadata();
         if (pic || name) syncHistory();
@@ -3403,6 +3425,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         updateEpisodeGroupVisibility();
         restoreDefaultVideoLayout();
         setNativeDetailInfoVisible(true);
+        setOriginalEnhancedActionVisibility(false);
         mBinding.search.setVisibility(View.VISIBLE);
         if (mBinding.videoShadow != null) mBinding.videoShadow.setVisibility(View.VISIBLE);
         setText(item);
