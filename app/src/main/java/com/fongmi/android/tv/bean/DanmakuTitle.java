@@ -29,7 +29,9 @@ public final class DanmakuTitle {
     private static final Pattern EPISODE_SEASON = Pattern.compile("\\bS\\d{1,2}\\s*E\\s*0*([0-9]{1,5})\\b", Pattern.CASE_INSENSITIVE);
     private static final Pattern EPISODE_EP = Pattern.compile("\\b(?:EP|E|Episode)\\s*0*([0-9]{1,5})\\b", Pattern.CASE_INSENSITIVE);
 
-    /** "from xxx" 形式的来源标记 */
+    /** "from" 来源关键字（已基于来源分组，from 及其后的来源名都属于冗余信息） */
+    private static final Pattern SOURCE_FROM = Pattern.compile("\\bfrom\\b", Pattern.CASE_INSENSITIVE);
+    /** "from xxx" 形式的来源内联标记（displayTitle 回退用） */
     private static final Pattern SOURCE_INLINE = Pattern.compile("\\s*\\bfrom\\s+[^\\s\\-]+\\s*-?\\s*", Pattern.CASE_INSENSITIVE);
     /** 【】或[]包裹的来源/类型标记 */
     private static final Pattern SOURCE_MARK = Pattern.compile("[【\\[]([^】\\]]{1,24})[】\\]]");
@@ -92,15 +94,24 @@ public final class DanmakuTitle {
         if (TextUtils.isEmpty(text)) return null;
         String value = text;
         value = URL.matcher(value).replaceAll(" ");
-        value = SOURCE_INLINE.matcher(value).replaceAll(" ");
-        // 去掉所有【】/[]标记（来源、类型如"电视剧"等）
+        // 先截断：from 关键字或首个 " - " 分隔符（取先出现者）之前为剧名。
+        // 来源已在上一层按 source 分组，from 及其后的来源名/集数都属于冗余后缀。
+        int cut = findCut(value);
+        if (cut >= 0) value = value.substring(0, cut);
+        // 再清洗来源/类型/年份标记
         value = SOURCE_MARK.matcher(value).replaceAll(" ");
         value = YEAR.matcher(value).replaceAll(" ");
-        // 在第一个 " - " 分隔符处截断（之后通常是集数/来源）
-        Matcher dash = DASH.matcher(value);
-        if (dash.find()) value = value.substring(0, dash.start());
         value = BLANK.matcher(value).replaceAll(" ").trim();
         return value.isEmpty() ? null : value;
+    }
+
+    /** 返回剧名截断点索引：from 关键字或首个分隔符的起始位置；都没有返回 -1。 */
+    private static int findCut(String text) {
+        Matcher from = SOURCE_FROM.matcher(text);
+        if (from.find()) return from.start();
+        Matcher dash = DASH.matcher(text);
+        if (dash.find()) return dash.start();
+        return -1;
     }
 
     private static int matchEpisode(Pattern pattern, CharSequence text) {
