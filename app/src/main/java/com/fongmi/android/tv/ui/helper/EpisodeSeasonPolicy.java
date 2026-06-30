@@ -32,4 +32,15 @@ public final class EpisodeSeasonPolicy {
         }
         return episodes;
     }
+
+    public static boolean shouldUseSingleSeasonEpisodeData(int sourceEpisodeCount, int firstSeason, List<Integer> seasons, Map<Integer, Integer> seasonCounts) {
+        if (sourceEpisodeCount <= 0 || firstSeason <= 0 || seasons == null || seasons.size() <= 1 || seasonCounts == null) return false;
+        int firstSeasonCount = Math.max(0, seasonCounts.getOrDefault(firstSeason, 0));
+        return firstSeasonCount >= sourceEpisodeCount && !canSliceBySeasonCounts(sourceEpisodeCount, seasons, seasonCounts);
+    }
+
+    public static int linearEpisodeNumber(int sourceEpisodeNumber, int zeroBasedIndex) {
+        if (sourceEpisodeNumber > 0 && (zeroBasedIndex < 0 || sourceEpisodeNumber >= zeroBasedIndex + 1)) return sourceEpisodeNumber;
+        return zeroBasedIndex >= 0 ? zeroBasedIndex + 1 : sourceEpisodeNumber;
+    }
 }
