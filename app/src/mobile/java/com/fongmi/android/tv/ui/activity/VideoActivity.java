@@ -2341,7 +2341,7 @@ public class VideoActivity extends PlaybackActivity implements Clock.Callback, C
         boolean showPiP = canShowPiP(shortDrama);
         hideWidgetOverlay();
         mBinding.control.danmaku.setVisibility(isLock() || !player().haveDanmaku() ? View.GONE : View.VISIBLE);
-        mBinding.control.setting.setVisibility(mHistory == null || isFullscreen() ? View.GONE : View.VISIBLE);
+        mBinding.control.setting.setVisibility(mHistory == null || (isFullscreen() && !shortDrama) ? View.GONE : View.VISIBLE);
         mBinding.control.right.getRoot().setVisibility(isFullscreen() || showPiP ? View.VISIBLE : View.GONE);
         mBinding.control.right.rotate.setVisibility(isFullscreen() && !isLock() ? View.VISIBLE : View.GONE);
         mBinding.control.right.pip.setVisibility(showPiP ? View.VISIBLE : View.GONE);

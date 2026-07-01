@@ -133,6 +133,21 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void mobileShortDramaKeepsStandardSettingButtonVisible() throws Exception {
+        Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int showControl = source.indexOf("private void showControl()");
+        int shortDrama = source.indexOf("boolean shortDrama = isShortDramaSource();", showControl);
+        int setting = source.indexOf("mBinding.control.setting.setVisibility(mHistory == null || (isFullscreen() && !shortDrama) ? View.GONE : View.VISIBLE);", shortDrama);
+        int shortDramaViews = source.indexOf("private View[] getShortDramaControlViews()");
+        int dockedSetting = source.indexOf("mBinding.control.setting,", shortDramaViews);
+
+        assertTrue(sourcePath + " is missing showControl", showControl >= 0);
+        assertTrue("short drama mode must keep the standard setting button visible while fullscreen", setting > shortDrama);
+        assertTrue("short drama floating controls must include the standard setting button", dockedSetting > shortDramaViews);
+    }
+
+    @Test
     public void mobileVideoTmdbMovableViewsKeepQualityBetweenFlagsAndEpisodes() throws Exception {
         Path sourcePath = findMobileJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
