@@ -60,6 +60,7 @@ import com.fongmi.android.tv.ui.custom.CustomRowPresenter;
 import com.fongmi.android.tv.ui.custom.CustomSelector;
 import com.fongmi.android.tv.ui.custom.CustomTitleView;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
+import com.fongmi.android.tv.ui.dialog.ExitConfirmDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.ui.presenter.FuncPresenter;
 import com.fongmi.android.tv.ui.presenter.HeaderPresenter;
@@ -114,8 +115,6 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     private String webDefaultChromeMode = TV_FULL;
     private boolean webToolbarVisible = true;
     private boolean loadingHomeCategory;
-    private long lastBackPressTime = 0;
-    private static final int EXIT_INTERVAL = 2000;
 
     private Site getHome() {
         return VodConfig.get().getHome();
@@ -838,13 +837,7 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
         } else if (mBinding.recycler.getSelectedPosition() != 0) {
             mBinding.recycler.scrollToPosition(0);
         } else {
-            long currentTime = System.currentTimeMillis();
-            if (currentTime - lastBackPressTime < EXIT_INTERVAL) {
-                exitHome();
-            } else {
-                lastBackPressTime = currentTime;
-                Notify.show(R.string.app_exit_confirm);
-            }
+            exitHome();
         }
     }
 
@@ -856,6 +849,10 @@ public class HomeActivity extends BaseActivity implements CustomTitleView.Listen
     }
 
     private void exitHome() {
+        ExitConfirmDialog.create(this::confirmExitHome).show(this);
+    }
+
+    private void confirmExitHome() {
         if (PlaybackService.isRunning()) moveTaskToBack(true);
         else super.onBackInvoked();
     }
