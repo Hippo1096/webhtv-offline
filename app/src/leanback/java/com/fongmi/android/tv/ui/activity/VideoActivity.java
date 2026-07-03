@@ -730,6 +730,8 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         mBinding.control.action.episodes.setOnClickListener(view -> onEpisodes());
         mBinding.episodeReverse.setOnClickListener(view -> onRevSort());
         mBinding.episodeViewMode.setOnClickListener(view -> toggleEpisodeViewMode());
+        mBinding.episodeReverse.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
+        mBinding.episodeViewMode.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));
         mBinding.control.action.scale.setOnClickListener(view -> onScale());
         mBinding.control.action.actionQuality.setOnClickListener(view -> onQuality());
         mBinding.control.action.lut.setOnClickListener(view -> onLut());
@@ -1819,35 +1821,74 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         return 0;
     }
 
+    private int episodeFocusIndex(int id) {
+        return getEpisodeFocusOrders().indexOf(id);
+    }
+
     private List<Integer> getEpisodeFocusOrders() {
-        return Arrays.asList(R.id.flag, R.id.quality, R.id.array, R.id.episodeReverse, R.id.episodeViewMode, R.id.episode, R.id.episodeGrid, R.id.part, R.id.quick);
+        return Arrays.asList(
+                R.id.flag,
+                R.id.quality,
+                R.id.array,
+                R.id.episodeReverse,
+                R.id.episodeViewMode,
+                R.id.episode,
+                R.id.episodeGrid,
+                R.id.tmdbCast,
+                R.id.tmdbPhotos,
+                R.id.tmdbCrew,
+                R.id.tmdbRecommendations,
+                R.id.tmdbPersonalTmdbRecommendations,
+                R.id.tmdbPersonalDoubanRecommendations,
+                R.id.tmdbPersonalAiRecommendations,
+                R.id.part,
+                R.id.quick);
     }
 
     private void updateFocus() {
-        mArrayAdapter.setNextFocus(findFocusUp(2), findFocusDown(2));
-        mEpisodeAdapter.setNextFocusUp(findFocusUp(5));
+        int array = episodeFocusIndex(R.id.array);
+        int episode = episodeFocusIndex(R.id.episode);
+        int episodeGrid = episodeFocusIndex(R.id.episodeGrid);
+        int part = episodeFocusIndex(R.id.part);
+        int quick = episodeFocusIndex(R.id.quick);
+        mArrayAdapter.setNextFocus(findFocusUp(array), findFocusDown(array));
+        mEpisodeAdapter.setNextFocusUp(findFocusUp(episode));
         mFlagAdapter.setNextFocusDown(findFocusDown(0));
-        mEpisodeAdapter.setNextFocusDown(findFocusDown(5));
+        mEpisodeAdapter.setNextFocusDown(findFocusDown(episode));
         if (mEpisodeGridAdapter != null) {
-            mEpisodeGridAdapter.setNextFocusUp(findFocusUp(6));
-            mEpisodeGridAdapter.setNextFocusDown(findFocusDown(6));
+            mEpisodeGridAdapter.setNextFocusUp(findFocusUp(episodeGrid));
+            mEpisodeGridAdapter.setNextFocusDown(findFocusDown(episodeGrid));
         }
         updateEpisodeHeaderFocus();
-        mPartAdapter.setNextFocus(findFocusUp(7), findFocusDown(7));
-        mQuickAdapter.setNextFocus(findFocusUp(8), findFocusDown(8));
+        mPartAdapter.setNextFocus(findFocusUp(part), findFocusDown(part));
+        mQuickAdapter.setNextFocus(findFocusUp(quick), findFocusDown(quick));
         int searchDown = isVisible(mBinding.quick) ? R.id.quick : isVisible(mBinding.part) ? R.id.part : findFocusDown(-1);
         mBinding.search.setNextFocusDownId(searchDown == 0 ? View.NO_ID : searchDown);
     }
 
     private void updateEpisodeHeaderFocus() {
-        int up = findFocusUp(3);
-        int down = findFocusDown(4);
+        int up = findFocusUp(episodeFocusIndex(R.id.episodeReverse));
+        int down = findFocusDown(episodeFocusIndex(R.id.episodeViewMode));
         mBinding.episodeReverse.setNextFocusUpId(up == 0 ? View.NO_ID : up);
         mBinding.episodeReverse.setNextFocusDownId(down == 0 ? View.NO_ID : down);
         mBinding.episodeReverse.setNextFocusRightId(R.id.episodeViewMode);
         mBinding.episodeViewMode.setNextFocusUpId(up == 0 ? View.NO_ID : up);
         mBinding.episodeViewMode.setNextFocusDownId(down == 0 ? View.NO_ID : down);
         mBinding.episodeViewMode.setNextFocusLeftId(R.id.episodeReverse);
+    }
+
+    private boolean onEpisodeHeaderToolKey(View view, int keyCode, KeyEvent event) {
+        if (!KeyUtil.isLeftKey(event) && !KeyUtil.isRightKey(event)) return false;
+        if (!KeyUtil.isActionDown(event)) return true;
+        if (KeyUtil.isRightKey(event) && view == mBinding.episodeReverse && isVisible(mBinding.episodeViewMode)) {
+            mBinding.episodeViewMode.requestFocus(View.FOCUS_RIGHT);
+            return true;
+        }
+        if (KeyUtil.isLeftKey(event) && view == mBinding.episodeViewMode && isVisible(mBinding.episodeReverse)) {
+            mBinding.episodeReverse.requestFocus(View.FOCUS_LEFT);
+            return true;
+        }
+        return true;
     }
 
     private boolean isEpisodeListFocused() {
@@ -1882,7 +1923,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         } else if (position != 0) {
             return false;
         }
-        int target = findFocusUp(episodeGridMode ? 6 : 5);
+        int target = findFocusUp(episodeFocusIndex(episodeGridMode ? R.id.episodeGrid : R.id.episode));
         if (target == 0) return false;
         View view = findViewById(target);
         if (view == null || view.getVisibility() != View.VISIBLE) return false;
@@ -3396,6 +3437,7 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         }
 
         SpiderDebug.log("tmdb-tv", "绑定完成: 演员=%d 剧照=%d 主创=%d 推荐=%d 个性TMDB=%d 个性豆瓣=%d 个性智能=%d", cast.size(), photos.size(), creators.size(), recommendations.size(), personalTmdbRecommendations.size(), personalDoubanRecommendations.size(), personalAiRecommendations.size());
+        updateFocus();
 
         // TMDB / OMDB 多来源评分（TMDB / IMDb / 烂番茄 / Metacritic 等）
         bindTmdbOmdbRatings();
@@ -3791,13 +3833,14 @@ public class VideoActivity extends PlaybackActivity implements CustomKeyDownVod.
         chip.setPadding(ResUtil.dp2px(16), ResUtil.dp2px(10), ResUtil.dp2px(16), ResUtil.dp2px(10));
 
         android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
-        background.setColor(0x26FFFFFF);
+        background.setColor(0x6610141A);
         background.setCornerRadius(ResUtil.dp2px(8));
+        background.setStroke(ResUtil.dp2px(1), 0x33FFFFFF);
         chip.setBackground(background);
 
         TextView platformView = new TextView(this);
         platformView.setText(platform);
-        platformView.setTextColor(0xFF9AA7B4);
+        platformView.setTextColor(0xE6FFFFFF);
         platformView.setTextSize(13);
         platformView.setGravity(android.view.Gravity.CENTER);
         platformView.setSingleLine(true);

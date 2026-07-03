@@ -254,6 +254,86 @@ public class VideoActivityLayoutTest {
     }
 
     @Test
+    public void leanbackEpisodeFocusOrderReachesTmdbRowsAfterEpisodes() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int order = source.indexOf("private List<Integer> getEpisodeFocusOrders()");
+        int updateFocus = source.indexOf("private void updateFocus()", order);
+        String orderBody = updateFocus > order ? source.substring(order, updateFocus) : "";
+        int episodeGrid = orderBody.indexOf("R.id.episodeGrid");
+        int photos = orderBody.indexOf("R.id.tmdbPhotos");
+        int part = orderBody.indexOf("R.id.part");
+        int quick = orderBody.indexOf("R.id.quick");
+        int bindTmdb = source.indexOf("private void bindTmdbData()");
+        int bindRatings = source.indexOf("private void bindTmdbOmdbRatings()", bindTmdb);
+        String bindBody = bindRatings > bindTmdb ? source.substring(bindTmdb, bindRatings) : "";
+
+        assertTrue(sourcePath + " is missing getEpisodeFocusOrders", order >= 0);
+        assertTrue("leanback episode focus order must include the TMDB photos row", photos >= 0);
+        assertTrue("TMDB photos must be after episode rows so DPAD_DOWN can leave the selected episode card", episodeGrid >= 0 && episodeGrid < photos);
+        assertTrue("TMDB rows must stay before quick search rows in the detail-page focus order", photos < part && part < quick);
+        assertTrue("binding visible TMDB rows must refresh episode card nextFocusDown targets",
+                bindBody.contains("updateFocus();") && bindBody.indexOf("updateFocus();") < bindBody.indexOf("finishTmdbDetail();"));
+    }
+
+    @Test
+    public void leanbackTmdbOmdbRatingChipsUseReadableDarkGlass() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private View createOmdbRatingChip(String platform, String value, String color)");
+        int next = source.indexOf("private void setupBackdropSlideshow", method);
+        String body = method >= 0 && next > method ? source.substring(method, next) : "";
+
+        assertTrue(sourcePath + " is missing createOmdbRatingChip", method >= 0);
+        assertTrue("leanback OMDB chips should use dark glass so white/yellow text remains visible on light artwork",
+                body.contains("background.setColor(0x6610141A);")
+                        && body.contains("background.setStroke(ResUtil.dp2px(1), 0x33FFFFFF);")
+                        && body.contains("platformView.setTextColor(0xE6FFFFFF);")
+                        && !body.contains("background.setColor(0x26FFFFFF);")
+                        && !body.contains("platformView.setTextColor(0xFF9AA7B4);"));
+    }
+
+    @Test
+    public void leanbackEpisodeHeaderToolsTrapHorizontalDpadInsideToolPair() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int method = source.indexOf("private boolean onEpisodeHeaderToolKey");
+        int nextMethod = source.indexOf("private boolean isEpisodeListFocused()", method);
+        String body = method >= 0 && nextMethod > method ? source.substring(method, nextMethod) : "";
+
+        assertTrue("episode header reverse and grid/list buttons should handle DPAD horizontally themselves",
+                source.contains("mBinding.episodeReverse.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));")
+                        && source.contains("mBinding.episodeViewMode.setOnKeyListener((view, keyCode, event) -> onEpisodeHeaderToolKey(view, keyCode, event));"));
+        assertTrue(sourcePath + " is missing onEpisodeHeaderToolKey", method >= 0);
+        assertTrue("reverse DPAD_RIGHT should focus the grid/list button",
+                body.contains("KeyUtil.isRightKey(event) && view == mBinding.episodeReverse")
+                        && body.contains("mBinding.episodeViewMode.requestFocus(View.FOCUS_RIGHT);"));
+        assertTrue("grid/list DPAD_LEFT should focus the reverse button",
+                body.contains("KeyUtil.isLeftKey(event) && view == mBinding.episodeViewMode")
+                        && body.contains("mBinding.episodeReverse.requestFocus(View.FOCUS_LEFT);"));
+        assertTrue("unused horizontal directions should be consumed so focus cannot jump to unrelated action buttons",
+                body.lastIndexOf("return true;") > body.lastIndexOf("mBinding.episodeReverse.requestFocus(View.FOCUS_LEFT);"));
+    }
+
+    @Test
+    public void leanbackHorizontalEpisodeRowExposesVerticalFocusFromEveryCard() throws Exception {
+        Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "EpisodeAdapter.java"));
+        String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+        int top = source.indexOf("private boolean isTopEdge(int position)");
+        int bottom = source.indexOf("private boolean isBottomEdge(int position)");
+        int interfaces = source.indexOf("public interface OnClickListener", bottom);
+        String topBody = bottom > top ? source.substring(top, bottom) : "";
+        String bottomBody = interfaces > bottom ? source.substring(bottom, interfaces) : "";
+
+        assertTrue(sourcePath + " is missing isTopEdge", top >= 0);
+        assertTrue(sourcePath + " is missing isBottomEdge", bottom >= 0);
+        assertTrue("single-row horizontal episode cards must all expose nextFocusUp",
+                topBody.contains("return !verticalGridMode || position == 0;"));
+        assertTrue("single-row horizontal episode cards must all expose nextFocusDown",
+                bottomBody.contains("return !verticalGridMode || position == getItemCount() - 1;"));
+    }
+
+    @Test
     public void leanbackOriginalEnhancedHidesShortDisplayAndSourceActions() throws Exception {
         Path sourcePath = findLeanbackJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "VideoActivity.java"));
         String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
@@ -868,7 +948,7 @@ public class VideoActivityLayoutTest {
                         && source.contains("button.setTextColor(COLOR_FUSION_BACKDROP_TEXT);"));
         assertTrue("rating chips created after backdrop mode starts must keep white text instead of source colors",
                 source.contains("chip.setTextColor(backdropSurfaceMode ? COLOR_FUSION_BACKDROP_TEXT")
-                        && source.contains("valueView.setTextColor(backdropSurfaceMode ? COLOR_FUSION_BACKDROP_TEXT"));
+                        && source.contains("textView.setTextColor(backdropSurfaceMode ? COLOR_FUSION_BACKDROP_TEXT"));
         assertTrue("dynamic backdrop surface must be reported as a dark readable surface",
                 source.contains("if (backdropSurfaceMode) return false;")
                         && source.contains("if (backdropSurfaceMode) return COLOR_FUSION_BACKDROP_TEXT;"));
