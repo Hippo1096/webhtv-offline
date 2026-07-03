@@ -94,6 +94,10 @@ public class CollectAdapter extends RecyclerView.Adapter<CollectAdapter.ViewHold
         // 横屏模式使用WRAP_CONTENT，竖屏模式使用固定宽度160dp
         holder.binding.text.getLayoutParams().width = holder.isHorizontal ?
             ViewGroup.LayoutParams.WRAP_CONTENT : ResUtil.dp2px(160);
+        // 竖屏模式文字居中，横屏模式文字左对齐
+        holder.binding.text.setGravity(holder.isHorizontal ?
+            android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL :
+            android.view.Gravity.CENTER);
         holder.binding.text.setSingleLine(true);
         holder.binding.text.setEllipsize(android.text.TextUtils.TruncateAt.MARQUEE);
         holder.binding.text.setMarqueeRepeatLimit(-1);
