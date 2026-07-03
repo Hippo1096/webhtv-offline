@@ -584,10 +584,11 @@ public class TmdbDetailActivityLayoutTest {
                 activity.contains("episodeAdapter.setOnFocusChangeListener(this::onDetailEpisodeFocusChange);")
                         && activity.contains("episodeAdapter.setOnKeyListener(this::onDetailEpisodeKey);")
                         && activity.contains("button.setOnKeyListener((view, keyCode, event) -> onDetailFlagKey(keyCode, event));")
-                        && activity.contains("button.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeRangeKey(keyCode, event));")
+                        && activity.contains("button.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeRangeKey(view, keyCode, event));")
                         && activity.contains("private boolean onDetailEpisodeKey(View view, int keyCode, KeyEvent event)")
-                        && activity.contains("return focusDetailEpisode(position - span);")
-                        && activity.contains("int target = position + span;")
+                        && activity.contains("return focusDetailEpisode(position - span, true);")
+                        && activity.contains("int nextRowStart = rowStart + span;")
+                        && activity.contains("int target = Math.min(position + span, rowEnd - 1);")
                         && activity.contains("private boolean focusDetailEpisodeRangeButton()")
                         && activity.contains("private boolean focusDetailEpisode(int position)")
                         && activity.contains("private void alignDetailEpisodeFocusedRow(View focusedView, int position)")
@@ -612,13 +613,196 @@ public class TmdbDetailActivityLayoutTest {
 
         assertTrue(activityPath + " is missing onDetailEpisodeKey", episodeKey >= 0);
         assertTrue("detail episode bottom row DPAD_DOWN must leave the episode grid instead of consuming the key",
-                episodeKeyBody.contains("if (target >= episodeAdapter.getItemCount()) return focusFirstVisibleTmdbRow();"));
+                episodeKeyBody.contains("if (nextRowStart >= episodeAdapter.getItemCount()) return focusFirstVisibleTmdbRow();"));
         assertTrue(activityPath + " is missing focusFirstVisibleTmdbRow", firstTmdb >= 0);
         assertTrue("TMDB photo row should be the first focus target below episodes",
                 firstTmdbBody.indexOf("binding.episodePhotoList") >= 0
                         && firstTmdbBody.indexOf("binding.episodePhotoList") < firstTmdbBody.indexOf("binding.castList"));
         assertTrue("TMDB row focusing must request focus on a concrete RecyclerView item",
                 activity.indexOf("holder.itemView.requestFocus();", focusRecycler) > focusRecycler);
+    }
+
+    @Test
+    public void detailEpisodeGridDpadUpDownPreservesCardViewportUntilBoundary() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+        int move = activity.indexOf("private boolean moveDetailEpisodeFocus");
+        int focus = activity.indexOf("private boolean focusDetailEpisode(int position)");
+        int focusEnd = activity.indexOf("private int detailEpisodeSpanCount()", focus);
+        int focusChange = activity.indexOf("private void onDetailEpisodeFocusChange");
+        int flagKey = activity.indexOf("private boolean onDetailFlagKey", focusChange);
+
+        assertTrue(activityPath + " is missing detail episode focus helpers", move >= 0 && focus > move && focusEnd > focus && focusChange >= 0 && flagKey > focusChange);
+        String moveBody = activity.substring(move, focus);
+        String focusBody = activity.substring(focus, focusEnd);
+        String focusChangeBody = activity.substring(focusChange, flagKey);
+
+        assertTrue("card-to-card DPAD_UP should keep the outer detail scroll anchored in the episode cards",
+                moveBody.contains("return focusDetailEpisode(position - span, true);"));
+        assertTrue("card-to-card DPAD_DOWN should keep the outer detail scroll anchored in the episode cards",
+                moveBody.contains("return focusDetailEpisode(target, true);"));
+        assertTrue("partial next-row DPAD_DOWN should land on the nearest available episode card before leaving the grid",
+                moveBody.contains("int rowStart = position - position % span;")
+                        && moveBody.contains("int nextRowStart = rowStart + span;")
+                        && moveBody.contains("int rowEnd = Math.min(nextRowStart + span, episodeAdapter.getItemCount());")
+                        && moveBody.contains("int target = Math.min(position + span, rowEnd - 1);"));
+        assertTrue("boundary DPAD_DOWN should still leave the episode grid only when no next row exists",
+                moveBody.contains("if (nextRowStart >= episodeAdapter.getItemCount()) return focusFirstVisibleTmdbRow();"));
+        assertTrue("preserved card moves should suppress the next outer row alignment",
+                focusBody.contains("private boolean focusDetailEpisode(int position, boolean preserveOuterScroll)")
+                        && focusBody.contains("prepareDetailEpisodeViewportPreserve(preserveOuterScroll);")
+                        && focusBody.contains("if (!shouldPreserveDetailEpisodeViewport(preserveOuterScroll)) alignDetailEpisodeFocusedRow"));
+        assertTrue("focus-change alignment should skip the outer scroll jump after a preserved card move",
+                focusChangeBody.contains("if (consumeDetailEpisodeViewportPreserve()) return;"));
+    }
+
+    @Test
+    public void detailEpisodeRangeDpadDownUsesButtonPositionInsteadOfSelectedEpisode() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+        int rangeKey = activity.indexOf("private boolean onDetailEpisodeRangeKey");
+        int toolKey = activity.indexOf("private boolean onDetailEpisodeToolKey", rangeKey);
+        int focusBelow = activity.indexOf("private boolean focusDetailEpisodeBelow", toolKey);
+        int nearest = activity.indexOf("private int nearestVisibleDetailEpisodePositionBelow", focusBelow);
+        int focusSelected = activity.indexOf("private boolean focusDetailEpisode()", nearest);
+
+        assertTrue(activityPath + " is missing detail episode range spatial focus helpers",
+                rangeKey >= 0 && toolKey > rangeKey && focusBelow > toolKey && nearest > focusBelow && focusSelected > nearest);
+        String rangeBody = activity.substring(rangeKey, toolKey);
+        String focusBelowBody = activity.substring(focusBelow, nearest);
+        String nearestBody = activity.substring(nearest, focusSelected);
+
+        assertTrue("episode range button key listeners should pass the focused button into DPAD handling",
+                activity.contains("button.setOnKeyListener((view, keyCode, event) -> onDetailEpisodeRangeKey(view, keyCode, event));")
+                        && activity.contains("return onDetailEpisodeRangeKey(focus, event.getKeyCode(), event);"));
+        assertTrue("DPAD_DOWN from an episode range button should use the button's screen position, not the selected episode",
+                rangeBody.contains("return focusDetailEpisodeBelow(view);")
+                        && !rangeBody.contains("return focusDetailEpisode();"));
+        assertTrue("spatial range-to-card focus should fall back to the first visible episode before using position 0",
+                focusBelowBody.contains("int target = nearestVisibleDetailEpisodePositionBelow(source);")
+                        && focusBelowBody.contains("if (target == RecyclerView.NO_POSITION) target = firstVisibleDetailEpisodePosition();")
+                        && focusBelowBody.contains("return focusDetailEpisode(target);"));
+        assertTrue("spatial range-to-card focus should compare visible episode cards in outer scroll coordinates",
+                nearestBody.contains("binding.scroll.offsetDescendantRectToMyCoords(source, sourceRect);")
+                        && nearestBody.contains("binding.episodeContainer.getChildCount()")
+                        && nearestBody.contains("binding.episodeContainer.getChildAdapterPosition(child)")
+                        && nearestBody.contains("Math.abs(rect.centerX() - sourceRect.centerX())"));
+    }
+
+    @Test
+    public void detailEpisodeRangeFocusActivatesPageEvenWhenIndexStateAlreadyMatches() throws Exception {
+        Path activityPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "activity", "TmdbDetailActivity.java"));
+        String activity = new String(Files.readAllBytes(activityPath), StandardCharsets.UTF_8);
+        int focusChange = activity.indexOf("private void setEpisodeRangeFocusChange");
+        int activate = activity.indexOf("private void activateFocusedEpisodeRange", focusChange);
+        int restore = activity.indexOf("private void restoreEpisodeRangeFocus", activate);
+        int rerender = activity.indexOf("private void rerenderEpisodeViewportOnly");
+        int updateStates = activity.indexOf("private void updateEpisodeRangeButtonStates", rerender);
+        int selectRange = activity.indexOf("private void selectEpisodeRange", updateStates);
+        String focusBody = focusChange >= 0 && activate > focusChange ? activity.substring(focusChange, activate) : "";
+        String activateBody = activate >= 0 && restore > activate ? activity.substring(activate, restore) : "";
+        String rerenderBody = rerender >= 0 && updateStates > rerender ? activity.substring(rerender, updateStates) : "";
+        String updateStatesBody = updateStates >= 0 && selectRange > updateStates ? activity.substring(updateStates, selectRange) : "";
+
+        assertTrue(activityPath + " is missing episode range focus activation helpers",
+                focusChange >= 0 && activate > focusChange && restore > activate && rerender >= 0 && updateStates > rerender && selectRange > updateStates);
+        assertTrue("episode range focus should activate the focused page instead of waiting for click",
+                focusBody.contains("if (!focused) return;")
+                        && focusBody.contains("activateFocusedEpisodeRange(index);")
+                        && !focusBody.contains("index == episodeRangeIndex) return"));
+        assertTrue("focused range activation should only skip work when both selected index and rendered page already match",
+                activateBody.contains("if (index == episodeRangeIndex && index == renderedEpisodeRangeIndex) return;")
+                        && activateBody.contains("pendingEpisodeRangeFocus = index;")
+                        && activateBody.contains("selectEpisodeRange(index, false);"));
+        assertTrue("episode viewport rendering should remember which range page is actually displayed",
+                activity.contains("private int renderedEpisodeRangeIndex = -1;")
+                        && rerenderBody.contains("renderedEpisodeRangeIndex = ranges.size() > 1 ? episodeRangeIndex : -1;"));
+        assertTrue("updating selected range state must restore the range focus listener that setChipState replaces",
+                updateStatesBody.contains("setChipState(button, i == episodeRangeIndex);")
+                        && updateStatesBody.contains("setEpisodeRangeFocusChange(button, i);")
+                        && updateStatesBody.indexOf("setChipState(button, i == episodeRangeIndex);") < updateStatesBody.indexOf("setEpisodeRangeFocusChange(button, i);"));
+    }
+
+    @Test
+    public void detailPhotoCardsUseUnifiedMaterialFocusStrokeAndAlignedCorners() throws Exception {
+        Path layoutPath = findMainResPath().resolve(Path.of("layout", "adapter_tmdb_photo.xml"));
+        Path adapterPath = findMainJavaPath().resolve(Path.of("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbPhotoAdapter.java"));
+        String layout = new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
+        String adapter = new String(Files.readAllBytes(adapterPath), StandardCharsets.UTF_8);
+
+        assertTrue("photo card root should own both clipping and focus stroke so rounded corners line up",
+                layout.contains("<com.google.android.material.card.MaterialCardView")
+                        && layout.contains("app:cardCornerRadius=\"8dp\"")
+                        && layout.contains("app:strokeWidth=\"1dp\"")
+                        && layout.contains("app:strokeColor=\"#33FFFFFF\""));
+        assertTrue("photo cards should not stack the old selector or platform focus highlight over the card radius",
+                layout.contains("android:defaultFocusHighlightEnabled=\"false\"")
+                        && layout.contains("android:stateListAnimator=\"@null\"")
+                        && !layout.contains("@drawable/selector_tmdb_card")
+                        && !layout.contains("?attr/selectableItemBackground"));
+        assertTrue("photo adapter should use the shared TMDB card focus helper for the yellow focus stroke",
+                adapter.contains("private final MaterialCardView card;")
+                        && adapter.contains("card = (MaterialCardView) itemView;")
+                        && adapter.contains("TmdbCardFocusHelper.bind(card")
+                        && adapter.contains("light ? 0x33647480 : 0x33FFFFFF"));
+    }
+
+    @Test
+    public void detailTmdbHorizontalCardsDoNotUseGrayStateOverlays() throws Exception {
+        String[] layouts = {
+                "adapter_tmdb_cast.xml",
+                "adapter_tmdb_person.xml",
+                "adapter_tmdb_person_photo.xml",
+                "adapter_tmdb_rail_item.xml",
+                "adapter_tmdb_rail_landscape.xml",
+                "adapter_tmdb_recommendation_landscape.xml",
+                "adapter_tmdb_work.xml",
+                "item_tmdb_person_photo.xml",
+                "item_tmdb_person_work.xml"
+        };
+
+        for (String file : layouts) {
+            String layout = readLayout(file);
+            assertTrue(file + " should use a Material card root so focus is drawn by stroke",
+                    layout.contains("<com.google.android.material.card.MaterialCardView"));
+            assertTrue(file + " should disable platform focus/state overlays",
+                    layout.contains("android:defaultFocusHighlightEnabled=\"false\"")
+                            && layout.contains("android:stateListAnimator=\"@null\"")
+                            && layout.contains("app:rippleColor=\"@android:color/transparent\""));
+            assertTrue(file + " should not put selector/ripple drawables over card content",
+                    !layout.contains("?attr/selectableItemBackground")
+                            && !layout.contains("@drawable/selector_tmdb_card")
+                            && !layout.contains("@drawable/selector_tmdb_cast_focus"));
+        }
+
+        String helper = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbCardFocusHelper.java");
+        assertTrue("shared TMDB card focus helper should clear gray state overlays before applying visible foreground focus",
+                helper.contains("card.setSelected(false);")
+                        && helper.contains("card.setActivated(false);")
+                        && helper.contains("card.setChecked(false);")
+                        && helper.contains("card.setForeground(null);")
+                        && helper.contains("card.setRippleColor(ColorStateList.valueOf(0x00000000));"));
+        assertTrue("shared TMDB card focus helper should draw a transparent foreground border above card content",
+                helper.contains("private static final int FOCUS_STROKE = 0xFFFFD166;")
+                        && helper.contains("card.setStrokeColor(focused ? FOCUS_STROKE : strokeColor);")
+                        && helper.contains("card.setForeground(focused ? foregroundBorder(card, FOCUS_STROKE, FOCUS_STROKE_DP) : null);")
+                        && helper.contains("drawable.setColor(Color.TRANSPARENT);")
+                        && !helper.contains("FOCUS_SCALE")
+                        && !helper.contains("scaleX(")
+                        && !helper.contains("scaleY("));
+
+        String castAdapter = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbCastAdapter.java");
+        assertTrue("cast/creator cards should use the same stroke-only helper instead of foreground activation",
+                castAdapter.contains("TmdbCardFocusHelper.bind(card")
+                        && !castAdapter.contains("setForeground(")
+                        && !castAdapter.contains("setActivated(focused)"));
+
+        String personPhotoAdapter = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbPersonPhotoAdapter.java");
+        String personWorkAdapter = readJava("com", "fongmi", "android", "tv", "ui", "adapter", "TmdbPersonWorkAdapter.java");
+        assertTrue("person photo cards should also use stroke-only focus",
+                personPhotoAdapter.contains("TmdbCardFocusHelper.bind(card"));
+        assertTrue("person work cards should also use stroke-only focus",
+                personWorkAdapter.contains("TmdbCardFocusHelper.bind(card"));
     }
 
     @Test
@@ -737,7 +921,7 @@ public class TmdbDetailActivityLayoutTest {
                 dispatchBody.contains("if (handleDetailEpisodeNavigationKey(event)) return true;")
                         && dispatchBody.contains("isFocusInside(focus, binding.flagScroll)") && dispatchBody.contains("onDetailFlagKey(event.getKeyCode(), event)")
                         && dispatchBody.contains("focus == binding.episodeReverse || focus == binding.episodeViewMode") && dispatchBody.contains("onDetailEpisodeToolKey(focus, event.getKeyCode(), event)")
-                        && dispatchBody.contains("isFocusInside(focus, binding.episodeRangeScroll)") && dispatchBody.contains("onDetailEpisodeRangeKey(event.getKeyCode(), event)")
+                        && dispatchBody.contains("isFocusInside(focus, binding.episodeRangeScroll)") && dispatchBody.contains("onDetailEpisodeRangeKey(focus, event.getKeyCode(), event)")
                         && dispatchBody.contains("isFocusInside(focus, binding.episodeContainer)") && dispatchBody.contains("onDetailEpisodeContainerKey(focus, event)")
                         && activity.contains("binding.episodeContainer.findContainingViewHolder(focus)")
                         && activity.contains("return moveDetailEpisodeFocus(position, event);"));
@@ -980,13 +1164,17 @@ public class TmdbDetailActivityLayoutTest {
         assertTrue(adapterPath + " is missing native enhanced card focus styling", method >= 0);
         assertTrue("native enhanced episode focus must use the same yellow stroke as TV buttons",
                 adapter.contains("private static final int FOCUS_STROKE = 0xFFFFD166;")
-                        && adapter.indexOf("holder.binding.getRoot().setStrokeColor(focused ? FOCUS_STROKE : activated ? activeStrokeColor : 0x00000000);", method) > method);
+                        && adapter.indexOf("holder.binding.getRoot().setStrokeColor(focused ? FOCUS_STROKE : activated ? activeStrokeColor : 0x00000000);", method) > method
+                        && adapter.indexOf("Drawable foreground = focused", method) > method
+                        && adapter.indexOf("TmdbCardFocusHelper.foregroundBorder(holder.binding.getRoot(), FOCUS_STROKE, FOCUS_STROKE_DP)", method) > method
+                        && adapter.indexOf("holder.binding.getRoot().setForeground(foreground);", method) > method);
         assertTrue("currently playing episode cards must keep the green active border when not focused",
                 adapter.contains("private int activeStrokeColor = 0xFF2CC56F;")
                         && adapter.indexOf("activated ? ACTIVE_STROKE_DP : 0", method) > method);
-        assertTrue("focused episode cards must scale up like the recent-watch card focus treatment",
-                adapter.contains("private static final float FOCUS_SCALE = 1.06f;")
-                        && adapter.indexOf("scaleX(scale).scaleY(scale)", method) > method);
+        assertTrue("focused episode cards must avoid scale focus because detail rows clip enlarged cards",
+                !adapter.contains("FOCUS_SCALE")
+                        && adapter.indexOf("scaleX(", method) < 0
+                        && adapter.indexOf("scaleY(", method) < 0);
         assertTrue("legacy episode foreground selector must also keep focus yellow and playing green",
                 selector.contains("android:color=\"#FFD166\"")
                         && selector.contains("android:color=\"#2CC56F\""));
@@ -1002,6 +1190,16 @@ public class TmdbDetailActivityLayoutTest {
         Path moduleRelative = Path.of("src", "main", "res");
         if (Files.exists(moduleRelative)) return moduleRelative;
         return Path.of("app", "src", "main", "res");
+    }
+
+    private static String readLayout(String file) throws Exception {
+        Path layoutPath = findMainResPath().resolve(Path.of("layout", file));
+        return new String(Files.readAllBytes(layoutPath), StandardCharsets.UTF_8);
+    }
+
+    private static String readJava(String first, String... more) throws Exception {
+        Path sourcePath = findMainJavaPath().resolve(Path.of(first, more));
+        return new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
     }
 
     private static Path findAppModulePath() {

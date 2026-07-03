@@ -1,5 +1,6 @@
 package com.fongmi.android.tv.ui.adapter;
 
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
@@ -35,7 +36,6 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
     private static final int FOCUS_STROKE_DP = 3;
     private static final int ACTIVE_STROKE_DP = 2;
     private static final int FOCUS_ELEVATION_DP = 8;
-    private static final float FOCUS_SCALE = 1.06f;
 
     public enum Mode {
         LIST,
@@ -431,9 +431,9 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
 
     private void applyCardFocus(ViewHolder holder, boolean activated) {
         if (isNativeEnhanced()) {
-            applyNativeEnhancedCardFocus(holder, activated, holder.binding.getRoot().hasFocus(), false);
+            applyNativeEnhancedCardFocus(holder, activated, holder.binding.getRoot().hasFocus());
             holder.binding.getRoot().setOnFocusChangeListener((view, focused) -> {
-                applyNativeEnhancedCardFocus(holder, activated, focused, true);
+                applyNativeEnhancedCardFocus(holder, activated, focused);
                 if (focusChangeListener != null) focusChangeListener.onFocusChange(view, focused);
             });
             return;
@@ -448,22 +448,23 @@ public class TmdbEpisodeAdapter extends RecyclerView.Adapter<TmdbEpisodeAdapter.
                 });
     }
 
-    private void applyNativeEnhancedCardFocus(ViewHolder holder, boolean activated, boolean focused, boolean animate) {
-        holder.binding.getRoot().setSelected(activated);
+    private void applyNativeEnhancedCardFocus(ViewHolder holder, boolean activated, boolean focused) {
+        holder.binding.getRoot().setSelected(false);
+        holder.binding.getRoot().setActivated(false);
+        holder.binding.getRoot().setChecked(false);
         holder.binding.getRoot().setForeground(null);
         holder.binding.getRoot().setCardBackgroundColor(0xFF141A20);
         holder.binding.getRoot().setStrokeColor(focused ? FOCUS_STROKE : activated ? activeStrokeColor : 0x00000000);
         holder.binding.getRoot().setStrokeWidth(ResUtil.dp2px(focused ? FOCUS_STROKE_DP : activated ? ACTIVE_STROKE_DP : 0));
         holder.binding.getRoot().setCardElevation(ResUtil.dp2px(focused ? FOCUS_ELEVATION_DP : 0));
         holder.binding.getRoot().setTranslationZ(ResUtil.dp2px(focused ? FOCUS_ELEVATION_DP : 0));
-        float scale = focused ? FOCUS_SCALE : 1f;
-        if (animate) {
-            holder.binding.getRoot().animate().scaleX(scale).scaleY(scale).setDuration(120).start();
-        } else {
-            holder.binding.getRoot().animate().cancel();
-            holder.binding.getRoot().setScaleX(scale);
-            holder.binding.getRoot().setScaleY(scale);
-        }
+        Drawable foreground = focused
+                ? TmdbCardFocusHelper.foregroundBorder(holder.binding.getRoot(), FOCUS_STROKE, FOCUS_STROKE_DP)
+                : activated ? TmdbCardFocusHelper.foregroundBorder(holder.binding.getRoot(), activeStrokeColor, ACTIVE_STROKE_DP) : null;
+        holder.binding.getRoot().setForeground(foreground);
+        holder.binding.getRoot().animate().cancel();
+        holder.binding.getRoot().setScaleX(1f);
+        holder.binding.getRoot().setScaleY(1f);
     }
 
     private boolean isNativeEnhanced() {
