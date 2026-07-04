@@ -103,7 +103,9 @@ public class VodConfig extends BaseConfig {
 
     @Override
     protected Config defaultConfig() {
-        return Config.vod();
+        Config cfg = Config.vod();
+        if (cfg.isEmpty()) cfg = Config.create(0, "assets://config.json");
+        return cfg;
     }
 
     @Override

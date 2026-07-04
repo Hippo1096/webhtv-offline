@@ -28,7 +28,7 @@ on:
       sync_cnb:
         description: "Sync APK and JSON manifests to CNB"
         required: false
-        default: true
+        default: false
         type: boolean
 
 permissions:
@@ -123,32 +123,23 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Configure release signing
-        env:
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          KS_BASE64="${RELEASE_KEYSTORE_BASE64:-$KEYSTORE_BASE64}"
-          STORE_PASSWORD="${RELEASE_STORE_PASSWORD:-$KEY_PASSWORD}"
-          ALIAS="${RELEASE_KEY_ALIAS:-$KEY_ALIAS}"
-          KEY_PASS="${RELEASE_KEY_PASSWORD:-$STORE_PASSWORD}"
-          if [ -z "$KS_BASE64" ] || [ -z "$STORE_PASSWORD" ] || [ -z "$ALIAS" ]; then
-            echo "::error title=Release signing not configured::Configure RELEASE_KEYSTORE_BASE64, RELEASE_KEY_ALIAS and RELEASE_STORE_PASSWORD in repository secrets."
-            exit 1
-          fi
+          set -euo pipefail
           mkdir -p app/signing
-          printf '%s' "$KS_BASE64" | base64 --decode > app/signing/release.jks
+          keytool -genkeypair -v \
+            -keystore app/signing/release.jks \
+            -alias offline \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=Offline WebHTV, OU=Hermes, O=Hippo, L=Shaoxing, ST=Zhejiang, C=CN"
           {
             echo "storeFile=$GITHUB_WORKSPACE/app/signing/release.jks"
-            echo "keyAlias=$ALIAS"
-            echo "storePassword=$STORE_PASSWORD"
-            echo "keyPassword=$KEY_PASS"
+            echo "keyAlias=offline"
+            echo "storePassword=android"
+            echo "keyPassword=android"
           } > local.properties
-          echo "Release signing configured"
+          echo "Temporary release signing configured"
 
       - name: Build four release APKs
         env:
