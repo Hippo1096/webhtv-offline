@@ -2,10 +2,10 @@ package com.fongmi.android.tv.utils;
 
 public class Github {
 
-    private static final String GITHUB_LATEST = "https://github.com/Silent1566/webhtv/releases/latest/download";
-    private static final String GITHUB_RELEASE = "https://github.com/Silent1566/webhtv/releases/download";
-    private static final String GITHUB_API = "https://api.github.com/repos/Silent1566/webhtv/releases/tags";
-    private static final String GITHUB_RELEASES_API = "https://api.github.com/repos/Silent1566/webhtv/releases";
+    private static final String GITHUB_LATEST = "https://github.com/Hippo1096/webhtv-offline/releases/latest/download";
+    private static final String GITHUB_RELEASE = "https://github.com/Hippo1096/webhtv-offline/releases/download";
+    private static final String GITHUB_API = "https://api.github.com/repos/Hippo1096/webhtv-offline/releases/tags";
+    private static final String GITHUB_RELEASES_API = "https://api.github.com/repos/Hippo1096/webhtv-offline/releases";
 
     public static String getCnbAsset(String name) {
         return getGithubLatestAsset(name);

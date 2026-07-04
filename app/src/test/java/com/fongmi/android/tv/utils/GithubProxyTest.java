@@ -15,14 +15,14 @@ public class GithubProxyTest {
 
     @Test
     public void applyPrefixesGithubReleaseDownloadUrl() {
-        String url = "https://github.com/Silent1566/webhtv/releases/latest/download/mobile-arm64_v8a.apk";
+        String url = "https://github.com/Hippo1096/webhtv-offline/releases/latest/download/mobile-arm64_v8a.apk";
 
         assertEquals("https://ghfast.top/" + url, GithubProxy.apply(url, "https://ghfast.top/"));
     }
 
     @Test
     public void applyLeavesGithubPageUrlAlone() {
-        String url = "https://github.com/Silent1566/webhtv";
+        String url = "https://github.com/Hippo1096/webhtv-offline";
 
         assertEquals(url, GithubProxy.apply(url, "https://ghfast.top/"));
     }
