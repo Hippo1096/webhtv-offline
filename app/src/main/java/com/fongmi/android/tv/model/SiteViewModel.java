@@ -87,6 +87,7 @@ public class SiteViewModel extends ViewModel {
     }
 
     public void homeContent() {
+        VodConfig.get().ensureLoaded();
         execute(TaskType.RESULT, result, () -> SiteApi.homeContent(VodConfig.get().getHome()));
     }
 
