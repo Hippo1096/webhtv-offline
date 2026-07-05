@@ -189,7 +189,14 @@ public class SettingActivity extends BaseActivity implements ConfigListener, Sit
     }
 
     private void onVod(View view) {
-        ConfigDialog.create().vod().show(this);
+        String currentUrl = VodConfig.getUrl();
+        if (VodConfig.ADVANCED_URL.equals(currentUrl)) {
+            setConfig(Config.find(VodConfig.DEFAULT_URL, 0));
+        } else if (VodConfig.DEFAULT_URL.equals(currentUrl)) {
+            setConfig(Config.find(VodConfig.ADVANCED_URL, "桃子源·进阶（含网盘）", 0));
+        } else {
+            ConfigDialog.create().vod().show(this);
+        }
     }
 
     private void onLive(View view) {
