@@ -1,6 +1,6 @@
 {
   "spider": "assets://spider.jar",
-  "logo": "https://avatars.githubusercontent.com/u/58679624?v=4",
+  "logo": "assets://peach_logo.png",
   "lives": [
     {
       "name": "初秋语•ipv4",
