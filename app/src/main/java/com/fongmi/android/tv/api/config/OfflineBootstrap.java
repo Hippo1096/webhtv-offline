@@ -11,8 +11,12 @@ import com.github.catvod.utils.Prefers;
 public class OfflineBootstrap {
 
     private static final String CONFIG_URL = "assets://config.json";
+    /** 进阶配置（含网盘搜索/认证源），可通过设置→配置切换 */
+    private static final String ADVANCED_CONFIG_URL = "assets://桃子源-进阶配置.json";
+    /** 进阶配置在配置列表中的显示名称 */
+    private static final String ADVANCED_CONFIG_NAME = "桃子源·进阶（含网盘）";
     private static final String PREF_KEY = "offline_bootstrap_version";
-    private static final String VERSION = "20260705-main-embedded-v2";
+    private static final String VERSION = "20260705-dual-config-v3";
     private static volatile boolean running;
 
     public static void ensureAsync() {
@@ -37,9 +41,18 @@ public class OfflineBootstrap {
         Config target = shouldSelectEmbedded ? embedded : current;
         if (target == null || target.isEmpty()) return;
         Server.get().start();
-        if (shouldSelectEmbedded) target.update();
+        if (shouldSelectEmbedded) {
+            target.update();
+            // 注册进阶配置进数据库，使其出现在"设置→配置"列表中
+            registerAdvancedConfig();
+        }
         VodConfig.get().clear().config(target).ensureLoaded();
         if (shouldSelectEmbedded && !VodConfig.get().getSites().isEmpty()) Prefers.put(PREF_KEY, VERSION);
         RefreshEvent.home();
+    }
+
+    /** 将进阶配置注册为可选配置项，用户可在设置→配置中切换 */
+    private static void registerAdvancedConfig() {
+        Config.find(ADVANCED_CONFIG_URL, ADVANCED_CONFIG_NAME, BaseConfig.VOD);
     }
 }
