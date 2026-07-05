@@ -35,7 +35,7 @@ public class VodConfig extends BaseConfig {
     /** 内置默认配置（不含网盘源） */
     public static final String DEFAULT_URL = "assets://config.json";
     /** 内置进阶配置（含网盘源），可在设置中点按切换 */
-    public static final String ADVANCED_URL = "assets://桃子源-进阶配置.json";
+    public static final String ADVANCED_URL = "assets://peach-advanced.json";
 
     private Site home;
     private String wall;
